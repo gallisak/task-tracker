@@ -6,6 +6,7 @@ import { validateEnv } from './config/env.js';
 import { PrismaModule } from './database/prisma.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard.js';
+import { ProjectsModule } from './modules/projects/projects.module.js';
 import { UsersModule } from './modules/users/users.module.js';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module.js';
 
@@ -20,6 +21,7 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module.js';
     UsersModule,
     AuthModule,
     WorkspacesModule,
+    ProjectsModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
