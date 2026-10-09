@@ -7,6 +7,7 @@ import { PrismaModule } from './database/prisma.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard.js';
 import { UsersModule } from './modules/users/users.module.js';
+import { WorkspacesModule } from './modules/workspaces/workspaces.module.js';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { UsersModule } from './modules/users/users.module.js';
     PrismaModule,
     UsersModule,
     AuthModule,
+    WorkspacesModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: JwtAuthGuard },
