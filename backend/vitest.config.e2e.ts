@@ -13,6 +13,7 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
       DATABASE_URL: resolveTestDatabaseUrl(),
+      AUTH_THROTTLE_LIMIT: '1000',
     },
   },
 });

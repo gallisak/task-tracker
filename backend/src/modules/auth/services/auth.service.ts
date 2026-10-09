@@ -1,0 +1,101 @@
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import type { User } from '../../../generated/prisma/client.js';
+import { UsersService } from '../../users/services/users.service.js';
+import { LoginDto } from '../dto/login.dto.js';
+import { RegisterDto } from '../dto/register.dto.js';
+import { PasswordService } from './password.service.js';
+import { RefreshTokensRepository } from '../repositories/refresh-tokens.repository.js';
+import { TokenPair, TokenService } from './token.service.js';
+
+export interface AuthResult {
+  user: User;
+  tokens: TokenPair;
+}
+
+@Injectable()
+export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
+  constructor(
+    private readonly users: UsersService,
+    private readonly passwords: PasswordService,
+    private readonly tokens: TokenService,
+    private readonly refreshTokens: RefreshTokensRepository,
+  ) {}
+
+  async register(dto: RegisterDto): Promise<AuthResult> {
+    const passwordHash = await this.passwords.hash(dto.password);
+    const user = await this.users.create({
+      email: dto.email,
+      name: dto.name,
+      passwordHash,
+    });
+
+    this.logger.log(`User registered: ${user.id}`);
+    return { user, tokens: await this.tokens.issue(user) };
+  }
+
+  async login(dto: LoginDto): Promise<AuthResult> {
+    const user = await this.users.findByEmail(dto.email);
+    const passwordMatches = await this.passwords.verify(
+      user?.passwordHash,
+      dto.password,
+    );
+
+    if (!user || !passwordMatches) {
+      this.logger.warn('Failed login attempt');
+      throw new UnauthorizedException('Invalid email or password');
+    }
+
+    await this.refreshTokens.deleteExpiredForUser(user.id);
+
+    this.logger.log(`User logged in: ${user.id}`);
+    return { user, tokens: await this.tokens.issue(user) };
+  }
+
+  async refresh(refreshToken: string | undefined): Promise<AuthResult> {
+    if (!refreshToken) {
+      throw new UnauthorizedException('Refresh token is missing');
+    }
+
+    const payload = await this.tokens.verifyRefresh(refreshToken);
+    const stored = await this.refreshTokens.findById(payload.jti);
+    if (!stored || stored.expiresAt <= new Date()) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const rotated = await this.refreshTokens.revokeIfActive(stored.id);
+    if (!rotated) {
+      await this.refreshTokens.revokeFamily(stored.familyId);
+      this.logger.warn(
+        `Refresh token reuse detected for user ${stored.userId}, session revoked`,
+      );
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const user = await this.users.findById(stored.userId);
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    return { user, tokens: await this.tokens.issue(user, stored.familyId) };
+  }
+
+  async logout(refreshToken: string | undefined): Promise<void> {
+    if (!refreshToken) {
+      return;
+    }
+
+    try {
+      const payload = await this.tokens.verifyRefresh(refreshToken, {
+        ignoreExpiration: true,
+      });
+      await this.refreshTokens.revokeFamily(payload.fam);
+      this.logger.log(`User logged out: ${payload.sub}`);
+    } catch (error) {
+      if (!(error instanceof UnauthorizedException)) {
+        throw error;
+      }
+    }
+  }
+}

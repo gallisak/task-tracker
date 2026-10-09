@@ -1,5 +1,6 @@
 import { ConfigService } from '@nestjs/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import cookieParser from 'cookie-parser';
 import { Env } from './env.js';
 
 export function configureApp(app: NestExpressApplication): void {
@@ -7,6 +8,7 @@ export function configureApp(app: NestExpressApplication): void {
 
   app.setGlobalPrefix('api');
   app.set('trust proxy', config.get('TRUST_PROXY', { infer: true }));
+  app.use(cookieParser());
   app.enableCors({
     origin: config.get('CORS_ORIGIN', { infer: true }),
     credentials: true,
