@@ -4,6 +4,7 @@ import { APP_FILTER, APP_PIPE } from '@nestjs/core';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { validateEnv } from './config/env.js';
 import { PrismaModule } from './database/prisma.module.js';
+import { UsersModule } from './modules/users/users.module.js';
 
 @Module({
   imports: [
@@ -13,6 +14,7 @@ import { PrismaModule } from './database/prisma.module.js';
       validate: validateEnv,
     }),
     PrismaModule,
+    UsersModule,
   ],
   providers: [
     { provide: APP_FILTER, useClass: AllExceptionsFilter },
