@@ -13,6 +13,10 @@ import {
 export class WorkspaceAccessService {
   constructor(private readonly workspaces: WorkspacesRepository) {}
 
+  async isMember(workspaceId: string, userId: string): Promise<boolean> {
+    return (await this.workspaces.findForUser(workspaceId, userId)) !== null;
+  }
+
   async requireMember(
     workspaceId: string,
     userId: string,
