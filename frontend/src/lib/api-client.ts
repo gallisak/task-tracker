@@ -14,6 +14,9 @@ export const apiClient = axios.create({
 
 export function getErrorMessage(error: unknown): string {
   if (error instanceof AxiosError) {
+    if (error.response?.status === 429) {
+      return 'Too many attempts. Please wait a minute and try again.'
+    }
     const body = error.response?.data as Partial<ApiErrorBody> | undefined
     if (body?.details?.length) {
       return body.details.join('. ')

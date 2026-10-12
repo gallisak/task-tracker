@@ -1,0 +1,77 @@
+import { LogOutIcon } from 'lucide-react'
+import { Link, Outlet } from 'react-router-dom'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import { useSession } from '@/features/auth/session-store'
+import { useLogout } from '@/features/auth/use-auth'
+
+function initialsOf(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('')
+}
+
+function UserMenu() {
+  const { user } = useSession()
+  const logout = useLogout()
+
+  if (!user) {
+    return null
+  }
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" className="gap-2 px-2" aria-label="Account menu">
+          <Avatar className="size-7">
+            <AvatarFallback>{initialsOf(user.name)}</AvatarFallback>
+          </Avatar>
+          <span className="hidden text-sm sm:inline">{user.name}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="font-normal">
+          <p className="truncate text-sm font-medium">{user.name}</p>
+          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={logout.isPending}
+          onSelect={() => logout.mutate()}
+        >
+          <LogOutIcon />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+export function AppLayout() {
+  return (
+    <div className="flex min-h-svh flex-col">
+      <header className="border-b bg-background">
+        <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between px-4">
+          <Link to="/" className="font-semibold tracking-tight">
+            Task Tracker
+          </Link>
+          <UserMenu />
+        </div>
+      </header>
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
+        <Outlet />
+      </main>
+    </div>
+  )
+}
