@@ -1,23 +1,27 @@
+import { Link } from 'react-router-dom'
 import { EmptyState, ErrorState, LoadingState } from '@/components/page-states'
-import { Badge } from '@/components/ui/badge'
 import { Card, CardAction, CardHeader, CardTitle } from '@/components/ui/card'
 import { getErrorMessage } from '@/lib/api-client'
 import { CreateWorkspaceDialog } from '../components/create-workspace-dialog'
+import { RoleBadge } from '../components/role-badge'
 import type { Workspace } from '../types'
 import { useWorkspaces } from '../use-workspaces'
 
 function WorkspaceCard({ workspace }: { workspace: Workspace }) {
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="truncate">{workspace.name}</CardTitle>
-        <CardAction>
-          <Badge variant={workspace.role === 'OWNER' ? 'default' : 'secondary'}>
-            {workspace.role === 'OWNER' ? 'Owner' : 'Member'}
-          </Badge>
-        </CardAction>
-      </CardHeader>
-    </Card>
+    <Link
+      to={`/workspaces/${workspace.id}`}
+      className="block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-ring"
+    >
+      <Card className="transition-colors hover:bg-muted/50">
+        <CardHeader>
+          <CardTitle className="truncate">{workspace.name}</CardTitle>
+          <CardAction>
+            <RoleBadge role={workspace.role} />
+          </CardAction>
+        </CardHeader>
+      </Card>
+    </Link>
   )
 }
 

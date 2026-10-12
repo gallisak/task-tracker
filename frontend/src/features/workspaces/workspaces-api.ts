@@ -12,3 +12,8 @@ export async function createWorkspace(
   const { data } = await apiClient.post<Workspace>('/workspaces', input)
   return data
 }
+
+export async function fetchWorkspace(workspaceId: string): Promise<Workspace> {
+  const { data } = await apiClient.get<Workspace>(`/workspaces/${workspaceId}`)
+  return data
+}

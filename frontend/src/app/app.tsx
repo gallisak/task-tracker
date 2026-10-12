@@ -10,7 +10,7 @@ export function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <RouterProvider router={router} />
-        <Toaster position="top-right" richColors />
+        <Toaster position="bottom-right" richColors />
       </QueryClientProvider>
     </ErrorBoundary>
   )
