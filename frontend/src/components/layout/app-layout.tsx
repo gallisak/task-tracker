@@ -1,6 +1,5 @@
 import { LogOutIcon } from 'lucide-react'
 import { Link, Outlet } from 'react-router-dom'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -10,17 +9,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { UserAvatar } from '@/components/user-avatar'
 import { useSession } from '@/features/auth/session-store'
 import { useLogout } from '@/features/auth/use-auth'
-
-function initialsOf(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase())
-    .join('')
-}
 
 function UserMenu() {
   const { user } = useSession()
@@ -34,9 +25,7 @@ function UserMenu() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="gap-2 px-2" aria-label="Account menu">
-          <Avatar className="size-7">
-            <AvatarFallback>{initialsOf(user.name)}</AvatarFallback>
-          </Avatar>
+          <UserAvatar name={user.name} className="size-7" />
           <span className="hidden text-sm sm:inline">{user.name}</span>
         </Button>
       </DropdownMenuTrigger>

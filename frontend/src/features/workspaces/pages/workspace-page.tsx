@@ -4,6 +4,7 @@ import { ErrorState, LoadingState } from '@/components/page-states'
 import { CreateProjectDialog } from '@/features/projects/components/create-project-dialog'
 import { ProjectList } from '@/features/projects/components/project-list'
 import { getErrorMessage, getErrorStatus } from '@/lib/api-client'
+import { MembersSection } from '../components/members-section'
 import { RoleBadge } from '../components/role-badge'
 import { useWorkspace } from '../use-workspaces'
 
@@ -36,7 +37,7 @@ export function WorkspacePage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div className="space-y-2">
         <Link
           to="/"
@@ -62,6 +63,10 @@ export function WorkspacePage() {
           canDelete={workspace.data.role === 'OWNER'}
         />
       </section>
+      <MembersSection
+        workspaceId={workspaceId}
+        canManage={workspace.data.role === 'OWNER'}
+      />
     </div>
   )
 }

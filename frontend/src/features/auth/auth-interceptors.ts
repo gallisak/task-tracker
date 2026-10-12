@@ -1,6 +1,7 @@
 import type { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
 import { refreshSession } from './auth-api'
 import { sessionStore } from './session-store'
+import { endSession } from './use-auth'
 
 type RetriableRequest = InternalAxiosRequestConfig & { retried?: boolean }
 
@@ -30,7 +31,7 @@ export function setupAuthInterceptors(client: AxiosInstance): void {
     try {
       sessionStore.signIn(await refreshSession())
     } catch {
-      sessionStore.signOut()
+      endSession()
       throw error
     }
 

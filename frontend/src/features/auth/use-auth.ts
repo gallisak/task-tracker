@@ -17,13 +17,15 @@ export function useRegister() {
   })
 }
 
+export function endSession(): void {
+  sessionStore.signOut()
+  queryClient.clear()
+}
+
 export function useLogout() {
   return useMutation({
     mutationFn: authApi.logout,
-    onSettled: () => {
-      sessionStore.signOut()
-      queryClient.clear()
-    },
+    onSettled: endSession,
   })
 }
 
