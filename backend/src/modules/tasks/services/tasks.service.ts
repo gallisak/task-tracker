@@ -9,6 +9,7 @@ import { WorkspaceAccessService } from '../../workspaces/services/workspace-acce
 import { CreateTaskDto } from '../dto/create-task.dto.js';
 import { ListTasksQueryDto } from '../dto/list-tasks-query.dto.js';
 import { UpdateTaskDto } from '../dto/update-task.dto.js';
+import { TasksGateway } from '../gateways/tasks.gateway.js';
 import {
   type StatusChangeWithUser,
   TaskStatusChangesRepository,
@@ -36,6 +37,7 @@ export class TasksService {
     private readonly statusChanges: TaskStatusChangesRepository,
     private readonly projectAccess: ProjectAccessService,
     private readonly workspaceAccess: WorkspaceAccessService,
+    private readonly gateway: TasksGateway,
   ) {}
 
   async create(
@@ -65,6 +67,7 @@ export class TasksService {
     this.logger.log(
       `Task created: ${task.id} in project ${project.id} by user ${userId}`,
     );
+    this.gateway.taskCreated(task);
     return task;
   }
 
@@ -119,6 +122,7 @@ export class TasksService {
     this.logger.log(
       `Task updated: ${task.id} by user ${userId} (${Object.keys(changes).join(', ')})`,
     );
+    this.gateway.taskUpdated(updated);
     return updated;
   }
 
@@ -127,6 +131,7 @@ export class TasksService {
 
     await this.tasks.delete(task.id);
     this.logger.log(`Task deleted: ${task.id} by user ${userId}`);
+    this.gateway.taskDeleted(task.projectId, task.id);
   }
 
   private async requireTask(

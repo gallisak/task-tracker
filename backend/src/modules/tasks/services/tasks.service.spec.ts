@@ -6,6 +6,7 @@ import {
 } from '../../../generated/prisma/client.js';
 import type { ProjectAccessService } from '../../projects/services/project-access.service.js';
 import type { WorkspaceAccessService } from '../../workspaces/services/workspace-access.service.js';
+import type { TasksGateway } from '../gateways/tasks.gateway.js';
 import type { TaskStatusChangesRepository } from '../repositories/task-status-changes.repository.js';
 import type {
   TaskWithUsers,
@@ -55,6 +56,11 @@ describe('TasksService', () => {
   const statusChanges = { findAllByTask: vi.fn() };
   const projectAccess = { requireProject: vi.fn() };
   const workspaceAccess = { isMember: vi.fn() };
+  const gateway = {
+    taskCreated: vi.fn(),
+    taskUpdated: vi.fn(),
+    taskDeleted: vi.fn(),
+  };
   let service: TasksService;
 
   beforeEach(() => {
@@ -64,6 +70,7 @@ describe('TasksService', () => {
       statusChanges as unknown as TaskStatusChangesRepository,
       projectAccess as unknown as ProjectAccessService,
       workspaceAccess as unknown as WorkspaceAccessService,
+      gateway as unknown as TasksGateway,
     );
     vi.spyOn(service['logger'], 'log').mockImplementation(() => undefined);
 
@@ -326,6 +333,58 @@ describe('TasksService', () => {
       await expect(
         service.update('task-1', USER_ID, { title: 'New' }),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('realtime notifications', () => {
+    const existing = () =>
+      tasks.findForUser.mockResolvedValue({
+        task: buildTask(),
+        workspaceId: WORKSPACE_ID,
+      });
+
+    it('announces a created task', async () => {
+      const created = await service.create(PROJECT_ID, USER_ID, {
+        title: 'Write copy',
+      });
+
+      expect(gateway.taskCreated).toHaveBeenCalledWith(created);
+    });
+
+    it('announces the saved state of an updated task', async () => {
+      existing();
+      const saved = buildTask({ status: TaskStatus.DONE });
+      tasks.update.mockResolvedValue(saved);
+
+      await service.update('task-1', USER_ID, { status: TaskStatus.DONE });
+
+      expect(gateway.taskUpdated).toHaveBeenCalledWith(saved);
+    });
+
+    it('stays silent when an update changes nothing', async () => {
+      existing();
+
+      await service.update('task-1', USER_ID, { status: TaskStatus.TODO });
+
+      expect(gateway.taskUpdated).not.toHaveBeenCalled();
+    });
+
+    it('stays silent when an update is rejected', async () => {
+      existing();
+      workspaceAccess.isMember.mockResolvedValue(false);
+
+      await expect(
+        service.update('task-1', USER_ID, { assigneeId: 'stranger' }),
+      ).rejects.toThrow();
+      expect(gateway.taskUpdated).not.toHaveBeenCalled();
+    });
+
+    it('announces a deleted task with its project', async () => {
+      existing();
+
+      await service.remove('task-1', USER_ID);
+
+      expect(gateway.taskDeleted).toHaveBeenCalledWith(PROJECT_ID, 'task-1');
     });
   });
 
