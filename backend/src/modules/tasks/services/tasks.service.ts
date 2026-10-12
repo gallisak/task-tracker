@@ -10,6 +10,10 @@ import { CreateTaskDto } from '../dto/create-task.dto.js';
 import { ListTasksQueryDto } from '../dto/list-tasks-query.dto.js';
 import { UpdateTaskDto } from '../dto/update-task.dto.js';
 import {
+  type StatusChangeWithUser,
+  TaskStatusChangesRepository,
+} from '../repositories/task-status-changes.repository.js';
+import {
   type TaskAccess,
   type TaskWithUsers,
   TasksRepository,
@@ -29,6 +33,7 @@ export class TasksService {
 
   constructor(
     private readonly tasks: TasksRepository,
+    private readonly statusChanges: TaskStatusChangesRepository,
     private readonly projectAccess: ProjectAccessService,
     private readonly workspaceAccess: WorkspaceAccessService,
   ) {}
@@ -87,6 +92,14 @@ export class TasksService {
     return task;
   }
 
+  async findStatusHistory(
+    taskId: string,
+    userId: string,
+  ): Promise<StatusChangeWithUser[]> {
+    const { task } = await this.requireTask(taskId, userId);
+    return this.statusChanges.findAllByTask(task.id);
+  }
+
   async update(
     taskId: string,
     userId: string,
@@ -102,7 +115,7 @@ export class TasksService {
       await this.assertAssignable(workspaceId, changes.assigneeId);
     }
 
-    const updated = await this.tasks.update(task.id, changes);
+    const updated = await this.tasks.update(task.id, changes, userId);
     this.logger.log(
       `Task updated: ${task.id} by user ${userId} (${Object.keys(changes).join(', ')})`,
     );

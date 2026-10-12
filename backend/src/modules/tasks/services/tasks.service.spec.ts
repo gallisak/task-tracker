@@ -6,6 +6,7 @@ import {
 } from '../../../generated/prisma/client.js';
 import type { ProjectAccessService } from '../../projects/services/project-access.service.js';
 import type { WorkspaceAccessService } from '../../workspaces/services/workspace-access.service.js';
+import type { TaskStatusChangesRepository } from '../repositories/task-status-changes.repository.js';
 import type {
   TaskWithUsers,
   TasksRepository,
@@ -51,6 +52,7 @@ describe('TasksService', () => {
     update: vi.fn(),
     delete: vi.fn(),
   };
+  const statusChanges = { findAllByTask: vi.fn() };
   const projectAccess = { requireProject: vi.fn() };
   const workspaceAccess = { isMember: vi.fn() };
   let service: TasksService;
@@ -59,6 +61,7 @@ describe('TasksService', () => {
     vi.resetAllMocks();
     service = new TasksService(
       tasks as unknown as TasksRepository,
+      statusChanges as unknown as TaskStatusChangesRepository,
       projectAccess as unknown as ProjectAccessService,
       workspaceAccess as unknown as WorkspaceAccessService,
     );
@@ -224,9 +227,13 @@ describe('TasksService', () => {
         status: TaskStatus.DONE,
       });
 
-      expect(tasks.update).toHaveBeenCalledWith('task-1', {
-        status: TaskStatus.DONE,
-      });
+      expect(tasks.update).toHaveBeenCalledWith(
+        'task-1',
+        {
+          status: TaskStatus.DONE,
+        },
+        USER_ID,
+      );
     });
 
     it('skips the database when nothing changed', async () => {
@@ -250,9 +257,13 @@ describe('TasksService', () => {
         WORKSPACE_ID,
         TEAMMATE_ID,
       );
-      expect(tasks.update).toHaveBeenCalledWith('task-1', {
-        assigneeId: TEAMMATE_ID,
-      });
+      expect(tasks.update).toHaveBeenCalledWith(
+        'task-1',
+        {
+          assigneeId: TEAMMATE_ID,
+        },
+        USER_ID,
+      );
     });
 
     it('rejects a new assignee from outside the workspace', async () => {
@@ -271,7 +282,11 @@ describe('TasksService', () => {
       await service.update('task-1', USER_ID, { assigneeId: null });
 
       expect(workspaceAccess.isMember).not.toHaveBeenCalled();
-      expect(tasks.update).toHaveBeenCalledWith('task-1', { assigneeId: null });
+      expect(tasks.update).toHaveBeenCalledWith(
+        'task-1',
+        { assigneeId: null },
+        USER_ID,
+      );
     });
 
     it('clears the description and the due date', async () => {
@@ -285,10 +300,14 @@ describe('TasksService', () => {
         dueDate: null,
       });
 
-      expect(tasks.update).toHaveBeenCalledWith('task-1', {
-        description: null,
-        dueDate: null,
-      });
+      expect(tasks.update).toHaveBeenCalledWith(
+        'task-1',
+        {
+          description: null,
+          dueDate: null,
+        },
+        USER_ID,
+      );
     });
 
     it('treats the same instant in another format as unchanged', async () => {
@@ -307,6 +326,29 @@ describe('TasksService', () => {
       await expect(
         service.update('task-1', USER_ID, { title: 'New' }),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('findStatusHistory', () => {
+    it('returns the history of an accessible task', async () => {
+      tasks.findForUser.mockResolvedValue({
+        task: buildTask(),
+        workspaceId: WORKSPACE_ID,
+      });
+      statusChanges.findAllByTask.mockResolvedValue([]);
+
+      await service.findStatusHistory('task-1', USER_ID);
+
+      expect(statusChanges.findAllByTask).toHaveBeenCalledWith('task-1');
+    });
+
+    it('does not expose the history of an inaccessible task', async () => {
+      tasks.findForUser.mockResolvedValue(null);
+
+      await expect(
+        service.findStatusHistory('task-1', USER_ID),
+      ).rejects.toThrow(NotFoundException);
+      expect(statusChanges.findAllByTask).not.toHaveBeenCalled();
     });
   });
 

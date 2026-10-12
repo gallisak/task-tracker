@@ -93,11 +93,33 @@ export class TasksRepository {
     return { task, workspaceId: project.workspaceId };
   }
 
-  update(taskId: string, data: UpdateTaskData): Promise<TaskWithUsers> {
-    return this.prisma.task.update({
-      where: { id: taskId },
-      data,
-      include: WITH_USERS,
+  update(
+    taskId: string,
+    data: UpdateTaskData,
+    changedById: string,
+  ): Promise<TaskWithUsers> {
+    return this.prisma.$transaction(async (tx) => {
+      if (data.status) {
+        const [current] = await tx.$queryRaw<{ status: TaskStatus }[]>`
+          SELECT status FROM tasks WHERE id = ${taskId}::uuid FOR UPDATE`;
+
+        if (current && current.status !== data.status) {
+          await tx.taskStatusChange.create({
+            data: {
+              taskId,
+              changedById,
+              fromStatus: current.status,
+              toStatus: data.status,
+            },
+          });
+        }
+      }
+
+      return tx.task.update({
+        where: { id: taskId },
+        data,
+        include: WITH_USERS,
+      });
     });
   }
 

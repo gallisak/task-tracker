@@ -25,6 +25,7 @@ import { CreateTaskDto } from '../dto/create-task.dto.js';
 import { ListTasksQueryDto } from '../dto/list-tasks-query.dto.js';
 import { TaskListResponseDto } from '../dto/task-list-response.dto.js';
 import { TaskResponseDto } from '../dto/task-response.dto.js';
+import { TaskStatusChangeResponseDto } from '../dto/task-status-change-response.dto.js';
 import { UpdateTaskDto } from '../dto/update-task.dto.js';
 import { TasksService } from '../services/tasks.service.js';
 
@@ -66,6 +67,16 @@ export class TasksController {
     @Param('taskId', ParseUUIDPipe) taskId: string,
   ): Promise<TaskResponseDto> {
     return TaskResponseDto.from(await this.tasks.getForUser(taskId, user.id));
+  }
+
+  @Get('tasks/:taskId/status-history')
+  @ApiNotFoundResponse({ description: 'Task not found' })
+  async findStatusHistory(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('taskId', ParseUUIDPipe) taskId: string,
+  ): Promise<TaskStatusChangeResponseDto[]> {
+    const changes = await this.tasks.findStatusHistory(taskId, user.id);
+    return changes.map((change) => TaskStatusChangeResponseDto.from(change));
   }
 
   @Patch('tasks/:taskId')
