@@ -34,6 +34,17 @@ export interface UpdateTaskData {
   dueDate?: Date | null;
 }
 
+export interface TaskFilters {
+  status?: TaskStatus;
+  priority?: TaskPriority;
+  assigneeId?: string;
+}
+
+export interface PageRequest {
+  skip: number;
+  take: number;
+}
+
 const WITH_USERS = { assignee: true, creator: true } as const;
 
 @Injectable()
@@ -42,6 +53,25 @@ export class TasksRepository {
 
   create(data: CreateTaskData): Promise<TaskWithUsers> {
     return this.prisma.task.create({ data, include: WITH_USERS });
+  }
+
+  async findPage(
+    projectId: string,
+    filters: TaskFilters,
+    page: PageRequest,
+  ): Promise<{ items: TaskWithUsers[]; total: number }> {
+    const where = { projectId, ...filters };
+    const [items, total] = await this.prisma.$transaction([
+      this.prisma.task.findMany({
+        where,
+        include: WITH_USERS,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        skip: page.skip,
+        take: page.take,
+      }),
+      this.prisma.task.count({ where }),
+    ]);
+    return { items, total };
   }
 
   async findForUser(

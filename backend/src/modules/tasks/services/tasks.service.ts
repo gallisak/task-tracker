@@ -7,6 +7,7 @@ import {
 import { ProjectAccessService } from '../../projects/services/project-access.service.js';
 import { WorkspaceAccessService } from '../../workspaces/services/workspace-access.service.js';
 import { CreateTaskDto } from '../dto/create-task.dto.js';
+import { ListTasksQueryDto } from '../dto/list-tasks-query.dto.js';
 import { UpdateTaskDto } from '../dto/update-task.dto.js';
 import {
   type TaskAccess,
@@ -14,6 +15,13 @@ import {
   TasksRepository,
   type UpdateTaskData,
 } from '../repositories/tasks.repository.js';
+
+export interface TaskPage {
+  items: TaskWithUsers[];
+  total: number;
+  page: number;
+  limit: number;
+}
 
 @Injectable()
 export class TasksService {
@@ -53,6 +61,25 @@ export class TasksService {
       `Task created: ${task.id} in project ${project.id} by user ${userId}`,
     );
     return task;
+  }
+
+  async findPage(
+    projectId: string,
+    userId: string,
+    query: ListTasksQueryDto,
+  ): Promise<TaskPage> {
+    const { project } = await this.projectAccess.requireProject(
+      projectId,
+      userId,
+    );
+
+    const { page, limit, ...filters } = query;
+    const { items, total } = await this.tasks.findPage(project.id, filters, {
+      skip: (page - 1) * limit,
+      take: limit,
+    });
+
+    return { items, total, page, limit };
   }
 
   async getForUser(taskId: string, userId: string): Promise<TaskWithUsers> {

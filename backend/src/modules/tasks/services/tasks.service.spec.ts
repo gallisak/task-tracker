@@ -47,6 +47,7 @@ describe('TasksService', () => {
   const tasks = {
     create: vi.fn(),
     findForUser: vi.fn(),
+    findPage: vi.fn(),
     update: vi.fn(),
     delete: vi.fn(),
   };
@@ -143,6 +144,57 @@ describe('TasksService', () => {
         service.create(PROJECT_ID, USER_ID, { title: 'Write copy' }),
       ).rejects.toThrow(NotFoundException);
       expect(tasks.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('findPage', () => {
+    beforeEach(() => {
+      tasks.findPage.mockResolvedValue({ items: [buildTask()], total: 41 });
+    });
+
+    it('translates the page number into an offset', async () => {
+      const result = await service.findPage(PROJECT_ID, USER_ID, {
+        page: 3,
+        limit: 20,
+      });
+
+      expect(tasks.findPage).toHaveBeenCalledWith(
+        PROJECT_ID,
+        {},
+        { skip: 40, take: 20 },
+      );
+      expect(result).toMatchObject({ total: 41, page: 3, limit: 20 });
+    });
+
+    it('passes only the filters to the repository', async () => {
+      await service.findPage(PROJECT_ID, USER_ID, {
+        page: 1,
+        limit: 10,
+        status: TaskStatus.DONE,
+        priority: TaskPriority.HIGH,
+        assigneeId: TEAMMATE_ID,
+      });
+
+      expect(tasks.findPage).toHaveBeenCalledWith(
+        PROJECT_ID,
+        {
+          status: TaskStatus.DONE,
+          priority: TaskPriority.HIGH,
+          assigneeId: TEAMMATE_ID,
+        },
+        { skip: 0, take: 10 },
+      );
+    });
+
+    it('does not query tasks of an inaccessible project', async () => {
+      projectAccess.requireProject.mockRejectedValue(
+        new NotFoundException('Project not found'),
+      );
+
+      await expect(
+        service.findPage(PROJECT_ID, USER_ID, { page: 1, limit: 20 }),
+      ).rejects.toThrow(NotFoundException);
+      expect(tasks.findPage).not.toHaveBeenCalled();
     });
   });
 

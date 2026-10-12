@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Query,
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
@@ -21,6 +22,8 @@ import {
   CurrentUser,
 } from '../../../common/decorators/current-user.decorator.js';
 import { CreateTaskDto } from '../dto/create-task.dto.js';
+import { ListTasksQueryDto } from '../dto/list-tasks-query.dto.js';
+import { TaskListResponseDto } from '../dto/task-list-response.dto.js';
 import { TaskResponseDto } from '../dto/task-response.dto.js';
 import { UpdateTaskDto } from '../dto/update-task.dto.js';
 import { TasksService } from '../services/tasks.service.js';
@@ -41,6 +44,18 @@ export class TasksController {
   ): Promise<TaskResponseDto> {
     return TaskResponseDto.from(
       await this.tasks.create(projectId, user.id, dto),
+    );
+  }
+
+  @Get('projects/:projectId/tasks')
+  @ApiNotFoundResponse({ description: 'Project not found' })
+  async findPage(
+    @CurrentUser() user: AuthenticatedUser,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Query() query: ListTasksQueryDto,
+  ): Promise<TaskListResponseDto> {
+    return TaskListResponseDto.from(
+      await this.tasks.findPage(projectId, user.id, query),
     );
   }
 
