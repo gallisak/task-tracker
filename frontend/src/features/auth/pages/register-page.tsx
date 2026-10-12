@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { FormField } from '@/components/form-field'
 import { Button } from '@/components/ui/button'
 import { AuthCard } from '../components/auth-card'
-import { FormError } from '../components/form-error'
+import { FormError } from '@/components/form-error'
 import { registerSchema, type RegisterFormValues } from '../schemas'
 import { useRegister } from '../use-auth'
 

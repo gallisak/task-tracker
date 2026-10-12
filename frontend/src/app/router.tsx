@@ -6,7 +6,7 @@ import {
 } from '@/features/auth/components/route-guards'
 import { LoginPage } from '@/features/auth/pages/login-page'
 import { RegisterPage } from '@/features/auth/pages/register-page'
-import { HomePage } from '@/pages/home-page'
+import { WorkspacesPage } from '@/features/workspaces/pages/workspaces-page'
 import { NotFoundPage } from '@/pages/not-found-page'
 import { RouteErrorPage } from '@/pages/route-error-page'
 
@@ -26,7 +26,7 @@ export const router = createBrowserRouter([
         children: [
           {
             element: <AppLayout />,
-            children: [{ path: '/', element: <HomePage /> }],
+            children: [{ path: '/', element: <WorkspacesPage /> }],
           },
         ],
       },
