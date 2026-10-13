@@ -66,8 +66,15 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    const rotated = await this.refreshTokens.revokeIfActive(stored.id);
-    if (!rotated && !(await this.wasJustRotated(stored.id))) {
+    const user = await this.users.findById(stored.userId);
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const tokens =
+      (await this.tokens.rotate(user, stored)) ??
+      (await this.reissueAfterRecentRotation(user, stored.id));
+    if (!tokens) {
       await this.refreshTokens.revokeFamily(stored.familyId);
       this.logger.warn(
         `Refresh token reuse detected for user ${stored.userId}, session revoked`,
@@ -75,25 +82,25 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    const user = await this.users.findById(stored.userId);
-    if (!user) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
-    }
-
-    return { user, tokens: await this.tokens.issue(user, stored.familyId) };
+    return { user, tokens };
   }
 
-  private async wasJustRotated(tokenId: string): Promise<boolean> {
+  private async reissueAfterRecentRotation(
+    user: User,
+    tokenId: string,
+  ): Promise<TokenPair | null> {
     const token = await this.refreshTokens.findById(tokenId);
-    if (!token?.revokedAt) {
-      return false;
+    if (
+      !token?.revokedAt ||
+      Date.now() - token.revokedAt.getTime() > REFRESH_REUSE_GRACE_MS
+    ) {
+      return null;
     }
 
-    const revokedMsAgo = Date.now() - token.revokedAt.getTime();
-    return (
-      revokedMsAgo <= REFRESH_REUSE_GRACE_MS &&
-      (await this.refreshTokens.hasActiveToken(token.familyId))
+    const successor = await this.refreshTokens.findActiveInFamily(
+      token.familyId,
     );
+    return successor ? this.tokens.pairFor(user, successor) : null;
   }
 
   async logout(refreshToken: string | undefined): Promise<void> {

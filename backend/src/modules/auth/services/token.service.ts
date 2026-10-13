@@ -4,7 +4,7 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { durationToMs } from '../../../common/utils/duration.js';
 import { Env } from '../../../config/env.js';
-import type { User } from '../../../generated/prisma/client.js';
+import type { RefreshToken, User } from '../../../generated/prisma/client.js';
 import { RefreshTokensRepository } from '../repositories/refresh-tokens.repository.js';
 
 export interface AccessTokenPayload {
@@ -49,13 +49,30 @@ export class TokenService {
     user: Pick<User, 'id' | 'email'>,
     familyId: string = randomUUID(),
   ): Promise<TokenPair> {
-    const refreshExpiresAt = new Date(Date.now() + this.refreshTtlMs);
     const stored = await this.refreshTokens.create({
       userId: user.id,
       familyId,
-      expiresAt: refreshExpiresAt,
+      expiresAt: this.nextRefreshExpiry(),
     });
+    return this.pairFor(user, stored);
+  }
 
+  async rotate(
+    user: Pick<User, 'id' | 'email'>,
+    current: RefreshToken,
+  ): Promise<TokenPair | null> {
+    const next = await this.refreshTokens.rotate(current.id, {
+      userId: user.id,
+      familyId: current.familyId,
+      expiresAt: this.nextRefreshExpiry(),
+    });
+    return next ? this.pairFor(user, next) : null;
+  }
+
+  async pairFor(
+    user: Pick<User, 'id' | 'email'>,
+    stored: RefreshToken,
+  ): Promise<TokenPair> {
     const accessPayload: AccessTokenPayload = {
       sub: user.id,
       email: user.email,
@@ -63,8 +80,12 @@ export class TokenService {
     const refreshPayload: RefreshTokenPayload = {
       sub: user.id,
       jti: stored.id,
-      fam: familyId,
+      fam: stored.familyId,
     };
+    const refreshTtlSeconds = Math.max(
+      1,
+      Math.ceil((stored.expiresAt.getTime() - Date.now()) / 1000),
+    );
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(accessPayload, {
@@ -73,11 +94,15 @@ export class TokenService {
       }),
       this.jwt.signAsync(refreshPayload, {
         secret: this.refreshSecret,
-        expiresIn: this.refreshTtlMs / 1000,
+        expiresIn: refreshTtlSeconds,
       }),
     ]);
 
-    return { accessToken, refreshToken, refreshExpiresAt };
+    return { accessToken, refreshToken, refreshExpiresAt: stored.expiresAt };
+  }
+
+  private nextRefreshExpiry(): Date {
+    return new Date(Date.now() + this.refreshTtlMs);
   }
 
   async verifyAccess(token: string): Promise<AccessTokenPayload> {

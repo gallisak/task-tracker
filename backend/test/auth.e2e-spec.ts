@@ -22,6 +22,14 @@ function cookiePair(setCookie: string): string {
   return setCookie.split(';')[0];
 }
 
+function tokenIdOf(cookie: string): string {
+  const [, payload] = cookie.slice('refresh_token='.length).split('.');
+  const claims = JSON.parse(
+    Buffer.from(payload, 'base64url').toString('utf8'),
+  ) as { jti: string };
+  return claims.jti;
+}
+
 describe('Auth (e2e)', () => {
   let app: NestExpressApplication;
 
@@ -190,7 +198,7 @@ describe('Auth (e2e)', () => {
       await refresh('refresh_token=not.a.jwt').expect(401);
     });
 
-    it('accepts a token rotated a moment ago so an interrupted refresh keeps the session', async () => {
+    it('hands a retry inside the grace period the token that was already issued', async () => {
       const first = cookiePair(refreshCookieOf(await register().expect(201)));
       const second = cookiePair(
         refreshCookieOf(await refresh(first).expect(200)),
@@ -200,9 +208,30 @@ describe('Auth (e2e)', () => {
         refreshCookieOf(await refresh(first).expect(200)),
       );
 
-      expect(retried).not.toBe(second);
+      expect(tokenIdOf(retried)).toBe(tokenIdOf(second));
+      const active = await app
+        .get(PrismaService)
+        .refreshToken.count({ where: { revokedAt: null } });
+      expect(active).toBe(1);
       await refresh(retried).expect(200);
-      await refresh(second).expect(200);
+    });
+
+    it('ends the session once two holders of a token replayed in the grace period both use it', async () => {
+      const first = cookiePair(refreshCookieOf(await register().expect(201)));
+      const owner = cookiePair(
+        refreshCookieOf(await refresh(first).expect(200)),
+      );
+      const thief = cookiePair(
+        refreshCookieOf(await refresh(first).expect(200)),
+      );
+
+      const thiefNext = cookiePair(
+        refreshCookieOf(await refresh(thief).expect(200)),
+      );
+      await expireRotationGrace();
+
+      await refresh(owner).expect(401);
+      await refresh(thiefNext).expect(401);
     });
 
     it('revokes the whole session when a used token is replayed after the grace period', async () => {

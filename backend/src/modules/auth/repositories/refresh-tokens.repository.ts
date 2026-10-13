@@ -20,19 +20,27 @@ export class RefreshTokensRepository {
     return this.prisma.refreshToken.findUnique({ where: { id } });
   }
 
-  async revokeIfActive(id: string): Promise<boolean> {
-    const { count } = await this.prisma.refreshToken.updateMany({
-      where: { id, revokedAt: null },
-      data: { revokedAt: new Date() },
+  rotate(
+    id: string,
+    next: CreateRefreshTokenData,
+  ): Promise<RefreshToken | null> {
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.refreshToken.updateMany({
+        where: { id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      if (count === 0) {
+        return null;
+      }
+      return tx.refreshToken.create({ data: next });
     });
-    return count === 1;
   }
 
-  async hasActiveToken(familyId: string): Promise<boolean> {
-    const count = await this.prisma.refreshToken.count({
+  findActiveInFamily(familyId: string): Promise<RefreshToken | null> {
+    return this.prisma.refreshToken.findFirst({
       where: { familyId, revokedAt: null, expiresAt: { gt: new Date() } },
+      orderBy: { createdAt: 'desc' },
     });
-    return count > 0;
   }
 
   async revokeFamily(familyId: string): Promise<void> {
