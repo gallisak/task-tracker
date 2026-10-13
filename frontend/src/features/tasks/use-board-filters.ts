@@ -1,18 +1,17 @@
 import { useSearchParams } from 'react-router-dom'
+import { isUuid } from '@/lib/uuid'
 import { TASK_PRIORITIES, TASK_STATUSES } from './constants'
 import type { BoardFilterValues, TaskPriority, TaskStatus } from './types'
 
 const STATUS_PARAM = 'status'
 const ASSIGNEE_PARAM = 'assignee'
 const PRIORITY_PARAM = 'priority'
-const UUID_PATTERN = /^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i
-
 function parseStatus(value: string | null): TaskStatus | undefined {
   return TASK_STATUSES.find((status) => status === value)
 }
 
 function parseAssignee(value: string | null): string | undefined {
-  return value && UUID_PATTERN.test(value) ? value : undefined
+  return isUuid(value) ? value : undefined
 }
 
 function parsePriority(value: string | null): TaskPriority | undefined {

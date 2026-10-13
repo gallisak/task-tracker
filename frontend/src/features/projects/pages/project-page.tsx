@@ -4,23 +4,28 @@ import { ErrorState, LoadingState } from '@/components/page-states'
 import { Board } from '@/features/tasks/components/board'
 import { CreateTaskDialog } from '@/features/tasks/components/create-task-dialog'
 import { getErrorMessage, isNotFoundError } from '@/lib/api-client'
+import { isUuid } from '@/lib/uuid'
 import { useProject } from '../use-projects'
 
 export function ProjectPage() {
   const { projectId = '' } = useParams()
   const project = useProject(projectId)
 
+  if (!isUuid(projectId) || isNotFoundError(project.error)) {
+    return (
+      <ErrorState
+        title="Project not found"
+        message="It may have been deleted, or you do not have access to it."
+      />
+    )
+  }
+
   if (project.isPending) {
     return <LoadingState label="Loading project…" />
   }
 
   if (project.isError) {
-    return isNotFoundError(project.error) ? (
-      <ErrorState
-        title="Project not found"
-        message="It may have been deleted, or you do not have access to it."
-      />
-    ) : (
+    return (
       <ErrorState
         title="Could not load project"
         message={getErrorMessage(project.error)}

@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { isUuid } from '@/lib/uuid'
 import * as workspacesApi from './workspaces-api'
 
 export const workspaceKeys = {
@@ -17,6 +18,7 @@ export function useWorkspace(workspaceId: string) {
   return useQuery({
     queryKey: workspaceKeys.detail(workspaceId),
     queryFn: () => workspacesApi.fetchWorkspace(workspaceId),
+    enabled: isUuid(workspaceId),
   })
 }
 

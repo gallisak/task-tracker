@@ -39,6 +39,5 @@ export function getErrorStatus(error: unknown): number | undefined {
 }
 
 export function isNotFoundError(error: unknown): boolean {
-  const status = getErrorStatus(error)
-  return status === 404 || status === 400
+  return getErrorStatus(error) === 404
 }
