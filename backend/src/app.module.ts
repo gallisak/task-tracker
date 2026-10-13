@@ -1,11 +1,18 @@
-import { Module, ValidationPipe } from '@nestjs/common';
+import {
+  MiddlewareConsumer,
+  Module,
+  NestModule,
+  ValidationPipe,
+} from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
+import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware.js';
 import { validateEnv } from './config/env.js';
 import { PrismaModule } from './database/prisma.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard.js';
+import { HealthModule } from './modules/health/health.module.js';
 import { ProjectsModule } from './modules/projects/projects.module.js';
 import { TasksModule } from './modules/tasks/tasks.module.js';
 import { UsersModule } from './modules/users/users.module.js';
@@ -19,6 +26,7 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module.js';
       validate: validateEnv,
     }),
     PrismaModule,
+    HealthModule,
     UsersModule,
     AuthModule,
     WorkspacesModule,
@@ -38,4 +46,8 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module.js';
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    consumer.apply(RequestLoggerMiddleware).forRoutes('{*splat}');
+  }
+}

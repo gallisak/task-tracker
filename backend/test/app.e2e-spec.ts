@@ -13,6 +13,32 @@ describe('App (e2e)', () => {
     await app.close();
   });
 
+  it('reports its health without authentication', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/health')
+      .expect(200);
+
+    expect(response.body).toEqual({
+      status: 'ok',
+      uptimeSeconds: expect.any(Number),
+      databaseLatencyMs: expect.any(Number),
+      timestamp: expect.any(String),
+    });
+  });
+
+  it('sends security headers and hides the framework', async () => {
+    const response = await request(app.getHttpServer())
+      .get('/api/health')
+      .expect(200);
+
+    expect(response.headers['x-content-type-options']).toBe('nosniff');
+    expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
+    expect(response.headers['content-security-policy']).toContain(
+      "default-src 'self'",
+    );
+    expect(response.headers['x-powered-by']).toBeUndefined();
+  });
+
   it('returns errors in the unified format', async () => {
     const response = await request(app.getHttpServer())
       .get('/api/does-not-exist')
