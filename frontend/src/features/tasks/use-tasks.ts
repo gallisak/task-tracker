@@ -3,6 +3,7 @@ import {
   useMutation,
   useQueryClient,
 } from '@tanstack/react-query'
+import { moveTaskInColumns, type ColumnData } from './board-cache'
 import { COLUMN_PAGE_SIZE } from './constants'
 import * as tasksApi from './tasks-api'
 import { taskDetailKeys } from './use-task-details'
@@ -30,12 +31,11 @@ export function useColumnTasks(
       tasksApi.fetchTasks(projectId, {
         ...filters,
         status,
-        page: pageParam,
+        cursor: pageParam,
         limit: COLUMN_PAGE_SIZE,
       }),
-    initialPageParam: 1,
-    getNextPageParam: (lastPage) =>
-      lastPage.page < lastPage.totalPages ? lastPage.page + 1 : undefined,
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
   })
 }
 
@@ -45,14 +45,27 @@ export function useMoveTask(projectId: string) {
   return useMutation({
     mutationFn: ({ taskId, status }: { taskId: string; status: TaskStatus }) =>
       tasksApi.updateTask(taskId, { status }),
-    onSuccess: (task) => {
-      void queryClient.invalidateQueries({
-        queryKey: taskDetailKeys.statusHistory(task.id),
-      })
-      return queryClient.invalidateQueries({
-        queryKey: taskKeys.board(projectId),
-      })
+    onMutate: async ({ taskId, status }) => {
+      const queryKey = taskKeys.board(projectId)
+      await queryClient.cancelQueries({ queryKey })
+
+      const previous = queryClient.getQueriesData<ColumnData>({ queryKey })
+      for (const [key, data] of moveTaskInColumns(previous, taskId, status)) {
+        queryClient.setQueryData(key, data)
+      }
+      return { previous }
     },
+    onError: (_error, _variables, context) => {
+      for (const [key, data] of context?.previous ?? []) {
+        queryClient.setQueryData(key, data)
+      }
+    },
+    onSuccess: (task) =>
+      queryClient.invalidateQueries({
+        queryKey: taskDetailKeys.statusHistory(task.id),
+      }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: taskKeys.board(projectId) }),
   })
 }
 

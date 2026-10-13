@@ -95,9 +95,8 @@ describe('Task list (e2e)', () => {
     expect(titles(response)).toEqual(['E', 'D', 'C', 'B', 'A']);
     expect(response.body).toMatchObject({
       total: 5,
-      page: 1,
       limit: 20,
-      totalPages: 1,
+      nextCursor: null,
     });
   });
 
@@ -139,38 +138,69 @@ describe('Task list (e2e)', () => {
     expect(response.body).toMatchObject({
       items: [],
       total: 0,
-      totalPages: 0,
+      nextCursor: null,
     });
   });
 
   it('splits the result into pages', async () => {
     const first = await listTasks({ limit: 2 }).expect(200);
-    const second = await listTasks({ limit: 2, page: 2 }).expect(200);
-    const third = await listTasks({ limit: 2, page: 3 }).expect(200);
+    const second = await listTasks({
+      limit: 2,
+      cursor: first.body.nextCursor,
+    }).expect(200);
+    const third = await listTasks({
+      limit: 2,
+      cursor: second.body.nextCursor,
+    }).expect(200);
 
     expect(titles(first)).toEqual(['E', 'D']);
     expect(titles(second)).toEqual(['C', 'B']);
     expect(titles(third)).toEqual(['A']);
-    expect(second.body).toMatchObject({
-      total: 5,
-      page: 2,
+    expect(second.body).toMatchObject({ total: 5, limit: 2 });
+    expect(third.body.nextCursor).toBeNull();
+  });
+
+  it('pages within the filtered set', async () => {
+    const first = await listTasks({ priority: 'HIGH', limit: 2 }).expect(200);
+    const second = await listTasks({
+      priority: 'HIGH',
       limit: 2,
-      totalPages: 3,
-    });
+      cursor: first.body.nextCursor,
+    }).expect(200);
+
+    expect(first.body.total).toBe(3);
+    expect(titles(first)).toEqual(['E', 'C']);
+    expect(titles(second)).toEqual(['B']);
+    expect(second.body.nextCursor).toBeNull();
   });
 
-  it('counts pages within the filtered set', async () => {
-    const response = await listTasks({ priority: 'HIGH', limit: 2 }).expect(
-      200,
-    );
+  it('ends exactly at the last task without an empty extra page', async () => {
+    const response = await listTasks({ limit: 5 }).expect(200);
 
-    expect(response.body).toMatchObject({ total: 3, totalPages: 2 });
+    expect(titles(response)).toHaveLength(5);
+    expect(response.body.nextCursor).toBeNull();
   });
 
-  it('returns an empty page beyond the last one', async () => {
-    const response = await listTasks({ page: 9 }).expect(200);
+  it('does not skip or repeat tasks when the list changes between pages', async () => {
+    const first = await listTasks({ limit: 2 }).expect(200);
+    const added = await createTask({ title: 'Late arrival' });
 
-    expect(response.body).toMatchObject({ items: [], total: 5, page: 9 });
+    const second = await listTasks({
+      limit: 2,
+      cursor: first.body.nextCursor,
+    }).expect(200);
+    await api()
+      .delete(`/api/tasks/${added.body.id}`)
+      .set(...bearer(owner))
+      .expect(204);
+
+    expect(titles(second)).toEqual(['C', 'B']);
+  });
+
+  it('rejects a cursor it did not issue', async () => {
+    const response = await listTasks({ cursor: 'page-2' }).expect(400);
+
+    expect(response.body.message).toBe('Invalid cursor');
   });
 
   it('rejects invalid filters and paging parameters', async () => {
@@ -178,22 +208,20 @@ describe('Task list (e2e)', () => {
       status: 'BLOCKED',
       priority: 'HIGHEST',
       assigneeId: 'me',
-      page: 0,
       limit: 101,
     }).expect(400);
 
     expect(response.body.details).toEqual(
       expect.arrayContaining([
         'assigneeId must be a UUID',
-        'page must not be less than 1',
         'limit must not be greater than 100',
       ]),
     );
-    expect(response.body.details).toHaveLength(5);
+    expect(response.body.details).toHaveLength(4);
   });
 
-  it('rejects a page number beyond the supported range', async () => {
-    await listTasks({ page: 100001 }).expect(400);
+  it('rejects the offset parameter of the old paging scheme', async () => {
+    await listTasks({ page: 2 }).expect(400);
   });
 
   it('rejects unknown query parameters', async () => {

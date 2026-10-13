@@ -61,7 +61,7 @@ export function TaskCard({ task, isMoving, onOpen }: TaskCardProps) {
       ref={setNodeRef}
       className={cn(
         'cursor-grab rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        (isDragging || isMoving) && 'opacity-40',
+        isDragging && 'opacity-40',
       )}
       {...listeners}
       {...attributes}

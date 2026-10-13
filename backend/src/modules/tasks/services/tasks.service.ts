@@ -20,12 +20,13 @@ import {
   TasksRepository,
   type UpdateTaskData,
 } from '../repositories/tasks.repository.js';
+import { decodeTaskCursor, encodeTaskCursor } from '../utils/task-cursor.js';
 
 export interface TaskPage {
   items: TaskWithUsers[];
   total: number;
-  page: number;
   limit: number;
+  nextCursor: string | null;
 }
 
 @Injectable()
@@ -81,13 +82,22 @@ export class TasksService {
       userId,
     );
 
-    const { page, limit, ...filters } = query;
+    const { cursor, limit, ...filters } = query;
     const { items, total } = await this.tasks.findPage(project.id, filters, {
-      skip: (page - 1) * limit,
-      take: limit,
+      after: cursor ? decodeTaskCursor(cursor) : undefined,
+      take: limit + 1,
     });
 
-    return { items, total, page, limit };
+    const pageItems = items.slice(0, limit);
+    const lastItem = pageItems.at(-1);
+    const hasMore = items.length > limit;
+
+    return {
+      items: pageItems,
+      total,
+      limit,
+      nextCursor: hasMore && lastItem ? encodeTaskCursor(lastItem) : null,
+    };
   }
 
   async getForUser(taskId: string, userId: string): Promise<TaskWithUsers> {

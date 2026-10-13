@@ -21,9 +21,8 @@ export interface Task {
 export interface TaskPage {
   items: Task[]
   total: number
-  page: number
   limit: number
-  totalPages: number
+  nextCursor: string | null
 }
 
 export interface TaskFilters {
@@ -33,7 +32,7 @@ export interface TaskFilters {
 
 export interface TaskListParams extends TaskFilters {
   status?: TaskStatus
-  page: number
+  cursor?: string
   limit: number
 }
 

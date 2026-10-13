@@ -12,6 +12,7 @@ import type {
   TaskWithUsers,
   TasksRepository,
 } from '../repositories/tasks.repository.js';
+import { encodeTaskCursor } from '../utils/task-cursor.js';
 import { TasksService } from './tasks.service.js';
 
 const WORKSPACE_ID = 'workspace-1';
@@ -162,23 +163,64 @@ describe('TasksService', () => {
       tasks.findPage.mockResolvedValue({ items: [buildTask()], total: 41 });
     });
 
-    it('translates the page number into an offset', async () => {
+    it('asks for one extra task to learn whether more exist', async () => {
       const result = await service.findPage(PROJECT_ID, USER_ID, {
-        page: 3,
         limit: 20,
       });
 
       expect(tasks.findPage).toHaveBeenCalledWith(
         PROJECT_ID,
         {},
-        { skip: 40, take: 20 },
+        { after: undefined, take: 21 },
       );
-      expect(result).toMatchObject({ total: 41, page: 3, limit: 20 });
+      expect(result).toMatchObject({ total: 41, limit: 20, nextCursor: null });
+    });
+
+    it('returns a cursor to the last task when more exist', async () => {
+      const first = buildTask({ id: '01a13461-9b44-7009-a8f6-17e10aa64d6d' });
+      const second = buildTask({
+        id: '01a13461-9aee-715b-bfb7-164ccd2a48fa',
+        createdAt: new Date('2025-12-31'),
+      });
+      const extra = buildTask({ id: '01a13461-9aa0-7339-b1ec-3e7693e38840' });
+      tasks.findPage.mockResolvedValue({
+        items: [first, second, extra],
+        total: 41,
+      });
+
+      const result = await service.findPage(PROJECT_ID, USER_ID, { limit: 2 });
+
+      expect(result.items).toEqual([first, second]);
+      expect(result.nextCursor).toBe(encodeTaskCursor(second));
+    });
+
+    it('continues after the position stored in the cursor', async () => {
+      const position = {
+        createdAt: new Date('2026-01-01T00:00:00.000Z'),
+        id: '01a13461-9b44-7009-a8f6-17e10aa64d6d',
+      };
+
+      await service.findPage(PROJECT_ID, USER_ID, {
+        limit: 20,
+        cursor: encodeTaskCursor(position),
+      });
+
+      expect(tasks.findPage).toHaveBeenCalledWith(
+        PROJECT_ID,
+        {},
+        { after: position, take: 21 },
+      );
+    });
+
+    it('rejects a cursor it did not issue', async () => {
+      await expect(
+        service.findPage(PROJECT_ID, USER_ID, { limit: 20, cursor: 'page-2' }),
+      ).rejects.toThrow('Invalid cursor');
+      expect(tasks.findPage).not.toHaveBeenCalled();
     });
 
     it('passes only the filters to the repository', async () => {
       await service.findPage(PROJECT_ID, USER_ID, {
-        page: 1,
         limit: 10,
         status: TaskStatus.DONE,
         priority: TaskPriority.HIGH,
@@ -192,7 +234,7 @@ describe('TasksService', () => {
           priority: TaskPriority.HIGH,
           assigneeId: TEAMMATE_ID,
         },
-        { skip: 0, take: 10 },
+        { after: undefined, take: 11 },
       );
     });
 
@@ -202,7 +244,7 @@ describe('TasksService', () => {
       );
 
       await expect(
-        service.findPage(PROJECT_ID, USER_ID, { page: 1, limit: 20 }),
+        service.findPage(PROJECT_ID, USER_ID, { limit: 20 }),
       ).rejects.toThrow(NotFoundException);
       expect(tasks.findPage).not.toHaveBeenCalled();
     });

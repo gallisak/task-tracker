@@ -6,6 +6,7 @@ import type {
   TaskStatus,
   User,
 } from '../../../generated/prisma/client.js';
+import type { TaskCursor } from '../utils/task-cursor.js';
 
 export type TaskWithUsers = Task & { assignee: User | null; creator: User };
 
@@ -41,7 +42,7 @@ export interface TaskFilters {
 }
 
 export interface PageRequest {
-  skip: number;
+  after?: TaskCursor;
   take: number;
 }
 
@@ -61,12 +62,20 @@ export class TasksRepository {
     page: PageRequest,
   ): Promise<{ items: TaskWithUsers[]; total: number }> {
     const where = { projectId, ...filters };
+    const { after } = page;
     const [items, total] = await this.prisma.$transaction([
       this.prisma.task.findMany({
-        where,
+        where: after
+          ? {
+              ...where,
+              OR: [
+                { createdAt: { lt: after.createdAt } },
+                { createdAt: after.createdAt, id: { lt: after.id } },
+              ],
+            }
+          : where,
         include: WITH_USERS,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-        skip: page.skip,
         take: page.take,
       }),
       this.prisma.task.count({ where }),

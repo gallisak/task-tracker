@@ -1,10 +1,19 @@
 import { Type } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Max,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { TaskPriority, TaskStatus } from '../../../generated/prisma/client.js';
 
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;
-export const MAX_PAGE = 100_000;
 
 export class ListTasksQueryDto {
   @IsOptional()
@@ -20,11 +29,10 @@ export class ListTasksQueryDto {
   assigneeId?: string;
 
   @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(MAX_PAGE)
-  page: number = 1;
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  cursor?: string;
 
   @IsOptional()
   @Type(() => Number)
