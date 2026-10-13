@@ -1,6 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service.js';
-import type { WorkspaceInvitation } from '../../../generated/prisma/client.js';
+import type {
+  WorkspaceInvitation,
+  WorkspaceRole,
+} from '../../../generated/prisma/client.js';
 import {
   USER_SUMMARY,
   type UserSummary,
@@ -10,18 +13,37 @@ export type InvitationWithInviter = WorkspaceInvitation & {
   invitedBy: UserSummary;
 };
 
+export interface CreateInvitationData {
+  workspaceId: string;
+  email: string;
+  invitedById: string;
+  tokenHash: string;
+  expiresAt: Date;
+}
+
+export interface AcceptedInvitation {
+  id: string;
+  workspaceId: string;
+  role: WorkspaceRole;
+}
+
 @Injectable()
 export class WorkspaceInvitationsRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(
-    workspaceId: string,
-    email: string,
-    invitedById: string,
-  ): Promise<InvitationWithInviter> {
-    return this.prisma.workspaceInvitation.create({
-      data: { workspaceId, email, invitedById },
-      include: { invitedBy: USER_SUMMARY },
+  create(data: CreateInvitationData): Promise<InvitationWithInviter> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.workspaceInvitation.deleteMany({
+        where: {
+          workspaceId: data.workspaceId,
+          email: data.email,
+          expiresAt: { lte: new Date() },
+        },
+      });
+      return tx.workspaceInvitation.create({
+        data,
+        include: { invitedBy: USER_SUMMARY },
+      });
     });
   }
 
@@ -33,33 +55,30 @@ export class WorkspaceInvitationsRepository {
     });
   }
 
-  async acceptAllForEmail(email: string, userId: string): Promise<number> {
-    const pending = await this.prisma.workspaceInvitation.count({
-      where: { email },
-    });
-    if (pending === 0) {
-      return 0;
-    }
+  findByTokenHash(tokenHash: string): Promise<WorkspaceInvitation | null> {
+    return this.prisma.workspaceInvitation.findUnique({ where: { tokenHash } });
+  }
 
+  accept(invitation: AcceptedInvitation, userId: string): Promise<boolean> {
     return this.prisma.$transaction(async (tx) => {
-      const invitations = await tx.workspaceInvitation.findMany({
-        where: { email },
+      const { count } = await tx.workspaceInvitation.deleteMany({
+        where: { id: invitation.id },
       });
-      if (invitations.length === 0) {
-        return 0;
+      if (count === 0) {
+        return false;
       }
 
       await tx.workspaceMember.createMany({
-        data: invitations.map((invitation) => ({
-          workspaceId: invitation.workspaceId,
-          userId,
-          role: invitation.role,
-        })),
+        data: [
+          {
+            workspaceId: invitation.workspaceId,
+            userId,
+            role: invitation.role,
+          },
+        ],
         skipDuplicates: true,
       });
-      await tx.workspaceInvitation.deleteMany({ where: { email } });
-
-      return invitations.length;
+      return true;
     });
   }
 }

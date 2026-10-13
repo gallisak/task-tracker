@@ -3,6 +3,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { PrismaService } from '../src/database/prisma.service.js';
 import { bearer, registerUser, type TestUser } from './support/auth.js';
+import { addMember } from './support/members.js';
 import { createTestApp, resetDatabase } from './support/test-app.js';
 
 describe('Projects (e2e)', () => {
@@ -54,11 +55,7 @@ describe('Projects (e2e)', () => {
     outsider = await registerUser(app, 'Outsider');
 
     workspaceId = await createWorkspace(owner, 'Product team');
-    await api()
-      .post(`/api/workspaces/${workspaceId}/invitations`)
-      .set(...bearer(owner))
-      .send({ email: member.email })
-      .expect(201);
+    await addMember(app, workspaceId, member);
   });
 
   afterAll(async () => {

@@ -3,6 +3,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { PrismaService } from '../src/database/prisma.service.js';
 import { bearer, registerUser, type TestUser } from './support/auth.js';
+import { addMember } from './support/members.js';
 import { createTestApp, resetDatabase } from './support/test-app.js';
 
 describe('Comments (e2e)', () => {
@@ -51,11 +52,7 @@ describe('Comments (e2e)', () => {
       .set(...bearer(owner))
       .send({ name: 'Product team' })
       .expect(201);
-    await api()
-      .post(`/api/workspaces/${workspace.body.id}/invitations`)
-      .set(...bearer(owner))
-      .send({ email: member.email })
-      .expect(201);
+    await addMember(app, workspace.body.id, member);
     const project = await api()
       .post(`/api/workspaces/${workspace.body.id}/projects`)
       .set(...bearer(owner))

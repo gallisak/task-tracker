@@ -4,7 +4,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { Env } from '../../config/env.js';
 import { UsersModule } from '../users/users.module.js';
-import { WorkspacesModule } from '../workspaces/workspaces.module.js';
 import { AuthController } from './controllers/auth.controller.js';
 import { RefreshTokensRepository } from './repositories/refresh-tokens.repository.js';
 import { AuthService } from './services/auth.service.js';
@@ -17,7 +16,6 @@ const ONE_MINUTE_MS = 60_000;
 @Module({
   imports: [
     UsersModule,
-    WorkspacesModule,
     JwtModule.register({}),
     ThrottlerModule.forRootAsync({
       inject: [ConfigService],

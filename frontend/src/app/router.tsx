@@ -31,6 +31,10 @@ const WorkspacePage = lazyPage(
   () => import('@/features/workspaces/pages/workspace-page'),
   'WorkspacePage',
 )
+const AcceptInvitationPage = lazyPage(
+  () => import('@/features/workspaces/pages/accept-invitation-page'),
+  'AcceptInvitationPage',
+)
 const ProjectPage = lazyPage(
   () => import('@/features/projects/pages/project-page'),
   'ProjectPage',
@@ -56,6 +60,10 @@ export const router = createBrowserRouter([
               { path: '/', element: <WorkspacesPage /> },
               { path: '/workspaces/:workspaceId', element: <WorkspacePage /> },
               { path: '/projects/:projectId', element: <ProjectPage /> },
+              {
+                path: '/invitations/accept',
+                element: <AcceptInvitationPage />,
+              },
             ],
           },
         ],

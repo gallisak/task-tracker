@@ -23,7 +23,6 @@ import {
 } from '../../../common/decorators/current-user.decorator.js';
 import { InvitationResponseDto } from '../dto/invitation-response.dto.js';
 import { InviteMemberDto } from '../dto/invite-member.dto.js';
-import { InviteResultDto } from '../dto/invite-result.dto.js';
 import { MemberResponseDto } from '../dto/member-response.dto.js';
 import { UpdateMemberRoleDto } from '../dto/update-member-role.dto.js';
 import { WorkspaceMembersService } from '../services/workspace-members.service.js';
@@ -77,8 +76,8 @@ export class WorkspaceMembersController {
     @CurrentUser() user: AuthenticatedUser,
     @Param('workspaceId', ParseUUIDPipe) workspaceId: string,
     @Body() dto: InviteMemberDto,
-  ): Promise<InviteResultDto> {
-    return InviteResultDto.from(
+  ): Promise<InvitationResponseDto> {
+    return InvitationResponseDto.from(
       await this.members.invite(workspaceId, user.id, dto),
     );
   }

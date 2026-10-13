@@ -1,7 +1,6 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import type { User } from '../../../generated/prisma/client.js';
 import { UsersService } from '../../users/services/users.service.js';
-import { WorkspaceMembersService } from '../../workspaces/services/workspace-members.service.js';
 import { LoginDto } from '../dto/login.dto.js';
 import { RegisterDto } from '../dto/register.dto.js';
 import { PasswordService } from './password.service.js';
@@ -24,7 +23,6 @@ export class AuthService {
     private readonly passwords: PasswordService,
     private readonly tokens: TokenService,
     private readonly refreshTokens: RefreshTokensRepository,
-    private readonly workspaceMembers: WorkspaceMembersService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResult> {
@@ -36,7 +34,6 @@ export class AuthService {
     });
 
     this.logger.log(`User registered: ${user.id}`);
-    await this.acceptInvitations(user);
     return { user, tokens: await this.tokens.issue(user) };
   }
 
@@ -53,7 +50,6 @@ export class AuthService {
     }
 
     await this.refreshTokens.deleteExpiredForUser(user.id);
-    await this.acceptInvitations(user);
 
     this.logger.log(`User logged in: ${user.id}`);
     return { user, tokens: await this.tokens.issue(user) };
@@ -84,19 +80,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    await this.acceptInvitations(user);
     return { user, tokens: await this.tokens.issue(user, stored.familyId) };
-  }
-
-  private async acceptInvitations(user: User): Promise<void> {
-    try {
-      await this.workspaceMembers.acceptPendingInvitations(user);
-    } catch (error) {
-      this.logger.error(
-        `Could not accept pending invitations for user ${user.id}`,
-        error instanceof Error ? error.stack : String(error),
-      );
-    }
   }
 
   private async wasJustRotated(tokenId: string): Promise<boolean> {

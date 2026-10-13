@@ -2,6 +2,7 @@ import type { NestExpressApplication } from '@nestjs/platform-express';
 import { io, type Socket } from 'socket.io-client';
 import request from 'supertest';
 import { bearer, registerUser, type TestUser } from './support/auth.js';
+import { addMember } from './support/members.js';
 import { createTestApp, resetDatabase } from './support/test-app.js';
 
 const QUIET_PERIOD_MS = 300;
@@ -68,11 +69,7 @@ describe('Realtime board updates (e2e)', () => {
       .set(...bearer(owner))
       .send({ name: 'Product team' })
       .expect(201);
-    await api()
-      .post(`/api/workspaces/${workspace.body.id}/invitations`)
-      .set(...bearer(owner))
-      .send({ email: member.email })
-      .expect(201);
+    await addMember(app, workspace.body.id, member);
 
     const createProject = async (name: string) => {
       const project = await api()

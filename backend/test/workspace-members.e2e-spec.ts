@@ -1,9 +1,13 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import request from 'supertest';
 import { PrismaService } from '../src/database/prisma.service.js';
+import { InvitationNotifier } from '../src/modules/workspaces/services/invitation-notifier.service.js';
 import { bearer, registerUser, type TestUser } from './support/auth.js';
+import { addMember } from './support/members.js';
 import { createTestApp, resetDatabase } from './support/test-app.js';
+
+const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 describe('Workspace members (e2e)', () => {
   let app: NestExpressApplication;
@@ -19,6 +23,35 @@ describe('Workspace members (e2e)', () => {
       .post(`/api/workspaces/${workspaceId}/invitations`)
       .set(...bearer(actor))
       .send({ email });
+
+  const inviteWithToken = async (email: string) => {
+    const send = vi.spyOn(app.get(InvitationNotifier), 'send');
+    const response = await invite(owner, email).expect(201);
+    const token = send.mock.calls.at(-1)?.[1] ?? '';
+    send.mockRestore();
+    return { invitation: response.body, token };
+  };
+
+  const accept = (actor: TestUser, token: string) =>
+    api()
+      .post('/api/invitations/accept')
+      .set(...bearer(actor))
+      .send({ token });
+
+  const getWorkspace = (actor: TestUser) =>
+    api()
+      .get(`/api/workspaces/${workspaceId}`)
+      .set(...bearer(actor));
+
+  const listInvitations = (actor: TestUser) =>
+    api()
+      .get(`/api/workspaces/${workspaceId}/invitations`)
+      .set(...bearer(actor));
+
+  const expireInvitations = () =>
+    app.get(PrismaService).workspaceInvitation.updateMany({
+      data: { expiresAt: new Date(Date.now() - 1000) },
+    });
 
   const listMembers = (actor: TestUser) =>
     api()
@@ -53,7 +86,7 @@ describe('Workspace members (e2e)', () => {
       .expect(201);
     workspaceId = workspace.body.id;
 
-    await invite(owner, member.email).expect(201);
+    await addMember(app, workspaceId, member);
   });
 
   afterAll(async () => {
@@ -84,77 +117,80 @@ describe('Workspace members (e2e)', () => {
   });
 
   describe('POST /invitations', () => {
-    it('adds a registered user straight away, ignoring email case', async () => {
-      const response = await invite(owner, outsider.email.toUpperCase()).expect(
-        201,
+    it('stores an invitation with an expiry and keeps the token out of the response', async () => {
+      const before = Date.now();
+      const { invitation, token } = await inviteWithToken(
+        'newcomer@example.com',
       );
 
-      expect(response.body).toMatchObject({
-        status: 'ADDED',
-        member: { user: { id: outsider.id }, role: 'MEMBER' },
+      expect(invitation).toEqual({
+        id: expect.any(String),
+        email: 'newcomer@example.com',
+        role: 'MEMBER',
+        invitedBy: { id: owner.id, name: owner.name, email: owner.email },
+        createdAt: expect.any(String),
+        expiresAt: expect.any(String),
       });
-      await api()
-        .get(`/api/workspaces/${workspaceId}`)
-        .set(...bearer(outsider))
-        .expect(200);
-    });
+      const lifetime = new Date(invitation.expiresAt).getTime() - before;
+      expect(lifetime).toBeGreaterThan(SEVEN_DAYS_MS - 60_000);
+      expect(lifetime).toBeLessThan(SEVEN_DAYS_MS + 60_000);
+      expect(token).not.toBe('');
+      expect(JSON.stringify(invitation)).not.toContain(token);
 
-    it('stores an invitation for an email without an account', async () => {
-      const response = await invite(owner, 'newcomer@example.com').expect(201);
-
-      expect(response.body).toMatchObject({
-        status: 'INVITED',
-        invitation: {
-          email: 'newcomer@example.com',
-          role: 'MEMBER',
-          invitedBy: { id: owner.id },
-        },
-      });
-
-      const pending = await api()
-        .get(`/api/workspaces/${workspaceId}/invitations`)
-        .set(...bearer(owner))
-        .expect(200);
+      const pending = await listInvitations(owner).expect(200);
       expect(pending.body).toHaveLength(1);
     });
 
-    it('turns a pending invitation into membership on registration', async () => {
+    it('stores only a hash of the token', async () => {
+      const { invitation, token } = await inviteWithToken(
+        'newcomer@example.com',
+      );
+
+      const stored = await app
+        .get(PrismaService)
+        .workspaceInvitation.findUniqueOrThrow({
+          where: { id: invitation.id },
+        });
+      expect(stored.tokenHash).toBe(
+        createHash('sha256').update(token).digest('hex'),
+      );
+    });
+
+    it('answers the same way whether or not the email has an account', async () => {
+      const registered = await invite(owner, outsider.email).expect(201);
+      const unknown = await invite(owner, 'newcomer@example.com').expect(201);
+
+      expect(Object.keys(registered.body).sort()).toEqual(
+        Object.keys(unknown.body).sort(),
+      );
+      expect(registered.body).not.toHaveProperty('status');
+      expect(registered.body).not.toHaveProperty('member');
+    });
+
+    it('gives no access to whoever registers with an invited email', async () => {
       await invite(owner, 'newcomer@example.com').expect(201);
 
-      const newcomer = await registerUser(app, 'Newcomer');
+      const intruder = await registerUser(app, 'Newcomer');
 
       const workspaces = await api()
         .get('/api/workspaces')
-        .set(...bearer(newcomer))
+        .set(...bearer(intruder))
         .expect(200);
-      expect(workspaces.body).toMatchObject([
-        { id: workspaceId, role: 'MEMBER' },
-      ]);
-
-      const pending = await api()
-        .get(`/api/workspaces/${workspaceId}/invitations`)
-        .set(...bearer(owner))
-        .expect(200);
-      expect(pending.body).toEqual([]);
+      expect(workspaces.body).toEqual([]);
+      await getWorkspace(intruder).expect(404);
     });
 
-    it('picks up an invitation left pending for a registered user at the next login', async () => {
-      await app.get(PrismaService).workspaceInvitation.create({
-        data: { workspaceId, email: outsider.email, invitedById: owner.id },
-      });
+    it('does not add a registered user until they accept', async () => {
+      await invite(owner, outsider.email.toUpperCase()).expect(201);
 
       await api()
         .post('/api/auth/login')
         .send({ email: outsider.email, password: 'correct-horse-battery' })
         .expect(200);
 
-      const workspaces = await api()
-        .get('/api/workspaces')
-        .set(...bearer(outsider))
-        .expect(200);
-      expect(workspaces.body).toMatchObject([
-        { id: workspaceId, role: 'MEMBER' },
-      ]);
+      await getWorkspace(outsider).expect(404);
+      const members = await listMembers(owner).expect(200);
+      expect(members.body).toHaveLength(2);
     });
 
     it('rejects a user who is already a member', async () => {
@@ -173,6 +209,20 @@ describe('Workspace members (e2e)', () => {
       expect(response.body.message).toBe('This email has already been invited');
     });
 
+    it('replaces an expired invitation with a new one', async () => {
+      const first = await inviteWithToken('newcomer@example.com');
+      await expireInvitations();
+
+      const second = await inviteWithToken('newcomer@example.com');
+
+      expect(second.invitation.id).not.toBe(first.invitation.id);
+      const pending = await listInvitations(owner).expect(200);
+      expect(pending.body).toHaveLength(1);
+      const newcomer = await registerUser(app, 'Newcomer');
+      await accept(newcomer, first.token).expect(404);
+      await accept(newcomer, second.token).expect(200);
+    });
+
     it('rejects an invalid email', async () => {
       await invite(owner, 'not-an-email').expect(400);
     });
@@ -186,10 +236,82 @@ describe('Workspace members (e2e)', () => {
     });
 
     it('shows pending invitations to owners only', async () => {
+      await listInvitations(member).expect(403);
+    });
+  });
+
+  describe('POST /api/invitations/accept', () => {
+    it('adds a registered user who presents the token', async () => {
+      const { token } = await inviteWithToken(outsider.email);
+
+      const response = await accept(outsider, token).expect(200);
+
+      expect(response.body).toEqual({ workspaceId });
+      await getWorkspace(outsider).expect(200);
+      const members = await listMembers(owner).expect(200);
+      expect(members.body).toHaveLength(3);
+      const pending = await listInvitations(owner).expect(200);
+      expect(pending.body).toEqual([]);
+    });
+
+    it('adds a newcomer who registers and then accepts', async () => {
+      const { token } = await inviteWithToken('newcomer@example.com');
+      const newcomer = await registerUser(app, 'Newcomer');
+
+      await accept(newcomer, token).expect(200);
+
+      const workspaces = await api()
+        .get('/api/workspaces')
+        .set(...bearer(newcomer))
+        .expect(200);
+      expect(workspaces.body).toMatchObject([
+        { id: workspaceId, role: 'MEMBER' },
+      ]);
+    });
+
+    it('refuses a token presented by another account', async () => {
+      const { token } = await inviteWithToken('newcomer@example.com');
+
+      const response = await accept(outsider, token).expect(404);
+
+      expect(response.body.message).toBe('Invitation not found or expired');
+      await getWorkspace(outsider).expect(404);
+      const pending = await listInvitations(owner).expect(200);
+      expect(pending.body).toHaveLength(1);
+    });
+
+    it('refuses an expired invitation', async () => {
+      const { token } = await inviteWithToken(outsider.email);
+      await expireInvitations();
+
+      await accept(outsider, token).expect(404);
+
+      await getWorkspace(outsider).expect(404);
+    });
+
+    it('refuses a token that was already used', async () => {
+      const { token } = await inviteWithToken(outsider.email);
+      await accept(outsider, token).expect(200);
+
+      await accept(outsider, token).expect(404);
+    });
+
+    it('refuses an unknown token', async () => {
+      await accept(outsider, 'not-a-real-token').expect(404);
+    });
+
+    it('rejects a request without a token', async () => {
       await api()
-        .get(`/api/workspaces/${workspaceId}/invitations`)
-        .set(...bearer(member))
-        .expect(403);
+        .post('/api/invitations/accept')
+        .set(...bearer(outsider))
+        .send({})
+        .expect(400);
+    });
+
+    it('requires authentication', async () => {
+      const { token } = await inviteWithToken(outsider.email);
+
+      await api().post('/api/invitations/accept').send({ token }).expect(401);
     });
   });
 

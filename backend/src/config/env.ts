@@ -41,6 +41,9 @@ export class Env {
   @Matches(DURATION_PATTERN)
   JWT_REFRESH_TTL: string = '7d';
 
+  @Matches(DURATION_PATTERN)
+  INVITATION_TTL: string = '7d';
+
   @Transform(({ value }) => value === true || value === 'true')
   @IsBoolean()
   COOKIE_SECURE: boolean = false;

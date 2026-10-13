@@ -1,5 +1,10 @@
 import { apiClient } from '@/lib/api-client'
-import type { Invitation, InviteResult, Member, WorkspaceRole } from './types'
+import type {
+  AcceptedInvitation,
+  Invitation,
+  Member,
+  WorkspaceRole,
+} from './types'
 
 export async function fetchMembers(workspaceId: string): Promise<Member[]> {
   const { data } = await apiClient.get<Member[]>(
@@ -39,10 +44,20 @@ export async function fetchInvitations(
 export async function inviteMember(
   workspaceId: string,
   email: string,
-): Promise<InviteResult> {
-  const { data } = await apiClient.post<InviteResult>(
+): Promise<Invitation> {
+  const { data } = await apiClient.post<Invitation>(
     `/workspaces/${workspaceId}/invitations`,
     { email },
+  )
+  return data
+}
+
+export async function acceptInvitation(
+  token: string,
+): Promise<AcceptedInvitation> {
+  const { data } = await apiClient.post<AcceptedInvitation>(
+    '/invitations/accept',
+    { token },
   )
   return data
 }
