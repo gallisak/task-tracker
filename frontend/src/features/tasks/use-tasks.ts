@@ -5,19 +5,29 @@ import {
 } from '@tanstack/react-query'
 import { COLUMN_PAGE_SIZE } from './constants'
 import * as tasksApi from './tasks-api'
-import type { CreateTaskInput, TaskStatus, UpdateTaskInput } from './types'
+import type {
+  CreateTaskInput,
+  TaskFilters,
+  TaskStatus,
+  UpdateTaskInput,
+} from './types'
 
 export const taskKeys = {
   board: (projectId: string) => ['projects', projectId, 'tasks'] as const,
-  column: (projectId: string, status: TaskStatus) =>
-    [...taskKeys.board(projectId), status] as const,
+  column: (projectId: string, status: TaskStatus, filters: TaskFilters) =>
+    [...taskKeys.board(projectId), status, filters] as const,
 }
 
-export function useColumnTasks(projectId: string, status: TaskStatus) {
+export function useColumnTasks(
+  projectId: string,
+  status: TaskStatus,
+  filters: TaskFilters,
+) {
   return useInfiniteQuery({
-    queryKey: taskKeys.column(projectId, status),
+    queryKey: taskKeys.column(projectId, status, filters),
     queryFn: ({ pageParam }) =>
       tasksApi.fetchTasks(projectId, {
+        ...filters,
         status,
         page: pageParam,
         limit: COLUMN_PAGE_SIZE,

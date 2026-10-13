@@ -26,10 +26,13 @@ export interface TaskPage {
   totalPages: number
 }
 
-export interface TaskListParams {
-  status?: TaskStatus
+export interface TaskFilters {
   priority?: TaskPriority
   assigneeId?: string
+}
+
+export interface TaskListParams extends TaskFilters {
+  status?: TaskStatus
   page: number
   limit: number
 }

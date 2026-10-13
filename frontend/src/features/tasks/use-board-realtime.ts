@@ -1,0 +1,55 @@
+import { useEffect } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { io } from 'socket.io-client'
+import { refreshSession } from '@/features/auth/auth-api'
+import { sessionStore } from '@/features/auth/session-store'
+import { taskKeys } from './use-tasks'
+
+const TASK_EVENTS = ['task.created', 'task.updated', 'task.deleted']
+
+export function useBoardRealtime(projectId: string): void {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    let hasConnected = false
+    let refreshedAfterReject = false
+    const socket = io({
+      auth: (send) => send({ token: sessionStore.get().accessToken }),
+    })
+
+    const reloadBoard = () =>
+      void queryClient.invalidateQueries({
+        queryKey: taskKeys.board(projectId),
+      })
+
+    socket.on('connect', () => {
+      socket.emit('project:join', { projectId })
+      if (hasConnected) {
+        reloadBoard()
+      }
+      hasConnected = true
+      refreshedAfterReject = false
+    })
+
+    socket.on('connect_error', (error) => {
+      if (error.message !== 'Unauthorized' || refreshedAfterReject) {
+        return
+      }
+      refreshedAfterReject = true
+      refreshSession()
+        .then((session) => {
+          sessionStore.signIn(session)
+          socket.connect()
+        })
+        .catch(() => undefined)
+    })
+
+    for (const event of TASK_EVENTS) {
+      socket.on(event, reloadBoard)
+    }
+
+    return () => {
+      socket.disconnect()
+    }
+  }, [projectId, queryClient])
+}

@@ -13,8 +13,11 @@ import { toast } from 'sonner'
 import { getErrorMessage } from '@/lib/api-client'
 import { TASK_STATUSES } from '../constants'
 import type { Task, TaskStatus } from '../types'
+import { useBoardFilters } from '../use-board-filters'
+import { useBoardRealtime } from '../use-board-realtime'
 import { useMoveTask } from '../use-tasks'
 import { BoardColumn } from './board-column'
+import { BoardFilters } from './board-filters'
 import { EditTaskDialog } from './edit-task-dialog'
 import { TaskCardView } from './task-card'
 
@@ -25,6 +28,8 @@ interface BoardProps {
 
 export function Board({ projectId, workspaceId }: BoardProps) {
   const moveTask = useMoveTask(projectId)
+  useBoardRealtime(projectId)
+  const [filters, setFilters] = useBoardFilters()
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
   const [openedTask, setOpenedTask] = useState<Task | null>(null)
   const sensors = useSensors(
@@ -59,12 +64,18 @@ export function Board({ projectId, workspaceId }: BoardProps) {
       onDragEnd={onDragEnd}
       onDragCancel={() => setDraggedTask(null)}
     >
+      <BoardFilters
+        workspaceId={workspaceId}
+        filters={filters}
+        onChange={setFilters}
+      />
       <div className="grid items-start gap-4 md:grid-cols-3">
         {TASK_STATUSES.map((status) => (
           <BoardColumn
             key={status}
             projectId={projectId}
             status={status}
+            filters={filters}
             movingTaskId={movingTaskId}
             onOpenTask={setOpenedTask}
           />

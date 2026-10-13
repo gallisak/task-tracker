@@ -6,7 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getErrorMessage } from '@/lib/api-client'
 import { cn } from '@/lib/utils'
 import { STATUS_LABELS } from '../constants'
-import type { Task, TaskStatus } from '../types'
+import type { Task, TaskFilters, TaskStatus } from '../types'
 import { useColumnTasks } from '../use-tasks'
 import { TaskCard } from './task-card'
 
@@ -23,6 +23,7 @@ function uniqueTasks(pages: { items: Task[] }[]): Task[] {
 interface BoardColumnProps {
   projectId: string
   status: TaskStatus
+  filters: TaskFilters
   movingTaskId: string | null
   onOpenTask: (task: Task) => void
 }
@@ -30,10 +31,11 @@ interface BoardColumnProps {
 export function BoardColumn({
   projectId,
   status,
+  filters,
   movingTaskId,
   onOpenTask,
 }: BoardColumnProps) {
-  const tasks = useColumnTasks(projectId, status)
+  const tasks = useColumnTasks(projectId, status, filters)
   const { setNodeRef, isOver } = useDroppable({ id: status })
   const items = tasks.data ? uniqueTasks(tasks.data.pages) : []
   const total = tasks.data?.pages[0]?.total
@@ -66,7 +68,9 @@ export function BoardColumn({
         />
       ) : items.length === 0 ? (
         <p className="px-1 py-6 text-center text-sm text-muted-foreground">
-          No tasks
+          {filters.assigneeId || filters.priority
+            ? 'No matching tasks'
+            : 'No tasks'}
         </p>
       ) : (
         <ul className="space-y-2">
