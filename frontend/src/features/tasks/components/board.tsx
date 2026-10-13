@@ -11,6 +11,7 @@ import {
 } from '@dnd-kit/core'
 import { toast } from 'sonner'
 import { getErrorMessage } from '@/lib/api-client'
+import { columnCoordinates } from '../board-keyboard'
 import { TASK_STATUSES } from '../constants'
 import type { Task, TaskStatus } from '../types'
 import { useBoardFilters } from '../use-board-filters'
@@ -30,11 +31,14 @@ export function Board({ projectId, workspaceId }: BoardProps) {
   const moveTask = useMoveTask(projectId)
   useBoardRealtime(projectId)
   const [filters, setFilters] = useBoardFilters()
+  const { status: visibleStatus, ...taskFilters } = filters
+  const visibleStatuses = visibleStatus ? [visibleStatus] : TASK_STATUSES
   const [draggedTask, setDraggedTask] = useState<Task | null>(null)
   const [openedTask, setOpenedTask] = useState<Task | null>(null)
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, {
+      coordinateGetter: columnCoordinates,
       keyboardCodes: { start: ['Space'], cancel: ['Escape'], end: ['Space'] },
     }),
   )
@@ -70,12 +74,12 @@ export function Board({ projectId, workspaceId }: BoardProps) {
         onChange={setFilters}
       />
       <div className="grid items-start gap-4 md:grid-cols-3">
-        {TASK_STATUSES.map((status) => (
+        {visibleStatuses.map((status) => (
           <BoardColumn
             key={status}
             projectId={projectId}
             status={status}
-            filters={filters}
+            filters={taskFilters}
             movingTaskId={movingTaskId}
             onOpenTask={setOpenedTask}
           />

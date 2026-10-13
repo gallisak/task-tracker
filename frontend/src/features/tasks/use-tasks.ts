@@ -43,6 +43,7 @@ export function useMoveTask(projectId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
+    mutationKey: taskKeys.board(projectId),
     mutationFn: ({ taskId, status }: { taskId: string; status: TaskStatus }) =>
       tasksApi.updateTask(taskId, { status }),
     onMutate: async ({ taskId, status }) => {
@@ -73,9 +74,10 @@ export function useCreateTask(projectId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
+    mutationKey: taskKeys.board(projectId),
     mutationFn: (input: CreateTaskInput) =>
       tasksApi.createTask(projectId, input),
-    onSuccess: () =>
+    onSettled: () =>
       queryClient.invalidateQueries({ queryKey: taskKeys.board(projectId) }),
   })
 }
@@ -84,16 +86,15 @@ export function useUpdateTask(projectId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
+    mutationKey: taskKeys.board(projectId),
     mutationFn: ({ taskId, input }: { taskId: string; input: UpdateTaskInput }) =>
       tasksApi.updateTask(taskId, input),
-    onSuccess: (task) => {
-      void queryClient.invalidateQueries({
+    onSuccess: (task) =>
+      queryClient.invalidateQueries({
         queryKey: taskDetailKeys.statusHistory(task.id),
-      })
-      return queryClient.invalidateQueries({
-        queryKey: taskKeys.board(projectId),
-      })
-    },
+      }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: taskKeys.board(projectId) }),
   })
 }
 
@@ -101,8 +102,9 @@ export function useDeleteTask(projectId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
+    mutationKey: taskKeys.board(projectId),
     mutationFn: tasksApi.deleteTask,
-    onSuccess: () =>
+    onSettled: () =>
       queryClient.invalidateQueries({ queryKey: taskKeys.board(projectId) }),
   })
 }

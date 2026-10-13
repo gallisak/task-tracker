@@ -1,26 +1,39 @@
 import { createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/app-layout'
+import { LoadingState } from '@/components/page-states'
 import {
   ProtectedRoute,
   PublicOnlyRoute,
 } from '@/features/auth/components/route-guards'
-import { LoginPage } from '@/features/auth/pages/login-page'
-import { RegisterPage } from '@/features/auth/pages/register-page'
-import { ProjectPage } from '@/features/projects/pages/project-page'
-import { WorkspacePage } from '@/features/workspaces/pages/workspace-page'
-import { WorkspacesPage } from '@/features/workspaces/pages/workspaces-page'
 import { NotFoundPage } from '@/pages/not-found-page'
 import { RouteErrorPage } from '@/pages/route-error-page'
 
 export const router = createBrowserRouter([
   {
     errorElement: <RouteErrorPage />,
+    hydrateFallbackElement: (
+      <div className="flex min-h-svh items-center justify-center">
+        <LoadingState />
+      </div>
+    ),
     children: [
       {
         element: <PublicOnlyRoute />,
         children: [
-          { path: '/login', element: <LoginPage /> },
-          { path: '/register', element: <RegisterPage /> },
+          {
+            path: '/login',
+            lazy: async () => ({
+              Component: (await import('@/features/auth/pages/login-page'))
+                .LoginPage,
+            }),
+          },
+          {
+            path: '/register',
+            lazy: async () => ({
+              Component: (await import('@/features/auth/pages/register-page'))
+                .RegisterPage,
+            }),
+          },
         ],
       },
       {
@@ -29,12 +42,30 @@ export const router = createBrowserRouter([
           {
             element: <AppLayout />,
             children: [
-              { path: '/', element: <WorkspacesPage /> },
+              {
+                path: '/',
+                lazy: async () => ({
+                  Component: (
+                    await import('@/features/workspaces/pages/workspaces-page')
+                  ).WorkspacesPage,
+                }),
+              },
               {
                 path: '/workspaces/:workspaceId',
-                element: <WorkspacePage />,
+                lazy: async () => ({
+                  Component: (
+                    await import('@/features/workspaces/pages/workspace-page')
+                  ).WorkspacePage,
+                }),
               },
-              { path: '/projects/:projectId', element: <ProjectPage /> },
+              {
+                path: '/projects/:projectId',
+                lazy: async () => ({
+                  Component: (
+                    await import('@/features/projects/pages/project-page')
+                  ).ProjectPage,
+                }),
+              },
             ],
           },
         ],

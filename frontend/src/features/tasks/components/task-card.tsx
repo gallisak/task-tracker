@@ -24,7 +24,7 @@ export function TaskCardView({ task, className }: TaskCardViewProps) {
         className,
       )}
     >
-      <p className="text-sm font-medium break-words">{task.title}</p>
+      <p className="text-sm font-medium wrap-break-word">{task.title}</p>
       <div className="flex items-center gap-2">
         <PriorityBadge priority={task.priority} />
         {task.dueDate && (
@@ -68,6 +68,7 @@ export function TaskCard({ task, isMoving, onOpen }: TaskCardProps) {
       onClick={() => onOpen(task)}
       onKeyDown={(event) => {
         if (event.key === 'Enter') {
+          event.preventDefault()
           onOpen(task)
           return
         }

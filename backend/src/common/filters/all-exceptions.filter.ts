@@ -8,6 +8,7 @@ import {
 } from '@nestjs/common';
 import { STATUS_CODES } from 'node:http';
 import type { Request, Response } from 'express';
+import type { Socket } from 'socket.io';
 import { Prisma } from '../../generated/prisma/client.js';
 
 export interface ErrorResponseBody {
@@ -34,6 +35,8 @@ const PRISMA_ERRORS: Record<string, NormalizedError> = {
   P2025: { status: HttpStatus.NOT_FOUND, message: 'Resource not found' },
 };
 
+export const SOCKET_EXCEPTION_EVENT = 'exception';
+
 const INTERNAL_ERROR: NormalizedError = {
   status: HttpStatus.INTERNAL_SERVER_ERROR,
   message: 'Internal server error',
@@ -44,11 +47,16 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private readonly logger = new Logger(AllExceptionsFilter.name);
 
   catch(exception: unknown, host: ArgumentsHost): void {
+    const { status, message, details } = this.normalize(exception);
+
+    if (host.getType() !== 'http') {
+      this.reportToSocket(exception, host, { status, message });
+      return;
+    }
+
     const http = host.switchToHttp();
     const request = http.getRequest<Request>();
     const response = http.getResponse<Response>();
-
-    const { status, message, details } = this.normalize(exception);
 
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(
@@ -67,6 +75,25 @@ export class AllExceptionsFilter implements ExceptionFilter {
     };
 
     response.status(status).json(body);
+  }
+
+  private reportToSocket(
+    exception: unknown,
+    host: ArgumentsHost,
+    { status, message }: NormalizedError,
+  ): void {
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      this.logger.error(
+        'Realtime message failed',
+        exception instanceof Error ? exception.stack : String(exception),
+      );
+    }
+    if (host.getType() === 'ws') {
+      host
+        .switchToWs()
+        .getClient<Socket>()
+        .emit(SOCKET_EXCEPTION_EVENT, { statusCode: status, message });
+    }
   }
 
   private normalize(exception: unknown): NormalizedError {

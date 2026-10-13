@@ -138,6 +138,25 @@ describe('Workspace members (e2e)', () => {
       expect(pending.body).toEqual([]);
     });
 
+    it('picks up an invitation left pending for a registered user at the next login', async () => {
+      await app.get(PrismaService).workspaceInvitation.create({
+        data: { workspaceId, email: outsider.email, invitedById: owner.id },
+      });
+
+      await api()
+        .post('/api/auth/login')
+        .send({ email: outsider.email, password: 'correct-horse-battery' })
+        .expect(200);
+
+      const workspaces = await api()
+        .get('/api/workspaces')
+        .set(...bearer(outsider))
+        .expect(200);
+      expect(workspaces.body).toMatchObject([
+        { id: workspaceId, role: 'MEMBER' },
+      ]);
+    });
+
     it('rejects a user who is already a member', async () => {
       const response = await invite(owner, member.email).expect(409);
 

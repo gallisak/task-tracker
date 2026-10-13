@@ -30,6 +30,10 @@ export interface TaskFilters {
   assigneeId?: string
 }
 
+export interface BoardFilterValues extends TaskFilters {
+  status?: TaskStatus
+}
+
 export interface TaskListParams extends TaskFilters {
   status?: TaskStatus
   cursor?: string

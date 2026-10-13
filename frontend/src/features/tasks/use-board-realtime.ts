@@ -19,9 +19,10 @@ export function useBoardRealtime(projectId: string): void {
     })
 
     const reloadBoard = () => {
-      void queryClient.invalidateQueries({
-        queryKey: taskKeys.board(projectId),
-      })
+      const boardKey = taskKeys.board(projectId)
+      if (queryClient.isMutating({ mutationKey: boardKey }) === 0) {
+        void queryClient.invalidateQueries({ queryKey: boardKey })
+      }
       void queryClient.invalidateQueries({
         queryKey: taskDetailKeys.all,
         predicate: (query) => query.queryKey[2] === 'status-history',

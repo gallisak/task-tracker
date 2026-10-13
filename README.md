@@ -18,7 +18,7 @@ No setup is needed. To change ports or secrets, copy `.env.example` to `.env`.
 
 ## Development and tests
 
-All commands start from the repository root. Prepare the database once:
+Local development needs Node.js 24 and Docker. All commands start from the repository root. Prepare the database once:
 
 ```
 cp .env.example .env
@@ -59,8 +59,16 @@ E2E tests need the `postgres` container and use their own database. GitHub Actio
 - **Access**: non-members get 404, members without the role get 403. Only owners manage members and delete projects.
 - **Consistency**: a status change and its history row are written in one transaction with a row lock.
 - **Tasks**: cursor pagination, filters by status, assignee and priority, indexes for each.
-- **Board**: one column per status, optimistic drag and drop, realtime reload through a socket.io room per project.
+- **Board**: one column per status, filters by status, assignee and priority kept in the URL, optimistic drag and drop with the mouse or the keyboard (Space to pick up and drop, arrows to change the column), realtime reload through a socket.io room per project.
 - **Security**: argon2, rate limiting on login and registration, Helmet, Content Security Policy.
+
+## Realtime protocol
+
+Swagger covers the REST API only. The socket.io server shares the origin of the API (path `/socket.io`).
+
+- Connect with `auth: { token: <access token> }`; a missing or invalid token is rejected with `Unauthorized`.
+- `project:join` with `{ projectId }` subscribes to a project and is acknowledged with `{ ok, error? }`. Only workspace members can join. `project:leave` unsubscribes.
+- The server sends `task.created` and `task.updated` with `{ task }`, and `task.deleted` with `{ projectId, taskId }`.
 
 ## Why these tools
 
@@ -82,9 +90,11 @@ E2E tests need the `postgres` container and use their own database. GitHub Actio
 
 ## Simplified on purpose, would change with more time
 
-- The board shows status as columns, so the UI filters only by assignee and priority; the API also filters by status.
 - An invited user who already has an account is added at once, without accepting. I would add an accept step and email delivery through a queue.
 - Logout revokes the refresh token; an issued access token stays valid until it expires (15 minutes).
 - Only tasks are paginated. Comments, members and status history are returned in full.
 - Tasks are ordered by creation date; there is no manual order inside a column.
 - The tasks service calls the socket gateway directly. I would publish domain events instead.
+- Removing a member unassigns their tasks inside the workspaces repository, so both changes share one transaction. With domain events the tasks module would own that update.
+- The client reloads the board on every realtime event and ignores the task sent with it. I would patch the cache from the event instead.
+- Project names are unique per workspace with exact case, so `Website` and `website` can coexist.

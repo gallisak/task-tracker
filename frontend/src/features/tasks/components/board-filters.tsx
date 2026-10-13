@@ -8,15 +8,20 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useMembers } from '@/features/workspaces/use-members'
-import { PRIORITY_LABELS, TASK_PRIORITIES } from '../constants'
-import type { TaskFilters, TaskPriority } from '../types'
+import {
+  PRIORITY_LABELS,
+  STATUS_LABELS,
+  TASK_PRIORITIES,
+  TASK_STATUSES,
+} from '../constants'
+import type { BoardFilterValues, TaskPriority, TaskStatus } from '../types'
 
 const ALL = 'all'
 
 interface BoardFiltersProps {
   workspaceId: string
-  filters: TaskFilters
-  onChange: (filters: TaskFilters) => void
+  filters: BoardFilterValues
+  onChange: (filters: BoardFilterValues) => void
 }
 
 export function BoardFilters({
@@ -25,10 +30,33 @@ export function BoardFilters({
   onChange,
 }: BoardFiltersProps) {
   const members = useMembers(workspaceId)
-  const hasFilters = Boolean(filters.assigneeId ?? filters.priority)
+  const hasFilters = Boolean(
+    filters.status ?? filters.assigneeId ?? filters.priority,
+  )
 
   return (
     <div className="flex flex-wrap items-center gap-2">
+      <Select
+        value={filters.status ?? ALL}
+        onValueChange={(value) =>
+          onChange({
+            ...filters,
+            status: value === ALL ? undefined : (value as TaskStatus),
+          })
+        }
+      >
+        <SelectTrigger aria-label="Filter by status" className="min-w-40">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={ALL}>All statuses</SelectItem>
+          {TASK_STATUSES.map((status) => (
+            <SelectItem key={status} value={status}>
+              {STATUS_LABELS[status]}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <Select
         value={filters.assigneeId ?? ALL}
         onValueChange={(value) =>

@@ -36,7 +36,7 @@ export class AuthService {
     });
 
     this.logger.log(`User registered: ${user.id}`);
-    await this.workspaceMembers.acceptPendingInvitations(user);
+    await this.acceptInvitations(user);
     return { user, tokens: await this.tokens.issue(user) };
   }
 
@@ -53,6 +53,7 @@ export class AuthService {
     }
 
     await this.refreshTokens.deleteExpiredForUser(user.id);
+    await this.acceptInvitations(user);
 
     this.logger.log(`User logged in: ${user.id}`);
     return { user, tokens: await this.tokens.issue(user) };
@@ -84,6 +85,17 @@ export class AuthService {
     }
 
     return { user, tokens: await this.tokens.issue(user, stored.familyId) };
+  }
+
+  private async acceptInvitations(user: User): Promise<void> {
+    try {
+      await this.workspaceMembers.acceptPendingInvitations(user);
+    } catch (error) {
+      this.logger.error(
+        `Could not accept pending invitations for user ${user.id}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   private async wasJustRotated(tokenId: string): Promise<boolean> {

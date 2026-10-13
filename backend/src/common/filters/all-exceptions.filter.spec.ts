@@ -14,6 +14,7 @@ function run(exception: unknown): ErrorResponseBody {
   const response = { status: vi.fn().mockReturnValue({ json }) };
   const request = { method: 'GET', originalUrl: '/api/things/1' };
   const host = {
+    getType: () => 'http',
     switchToHttp: () => ({
       getRequest: () => request,
       getResponse: () => response,
@@ -105,6 +106,26 @@ describe('AllExceptionsFilter', () => {
       message: 'Internal server error',
     });
     expect(JSON.stringify(body)).not.toContain('secret');
+  });
+
+  it('answers a failed realtime message on the socket instead of an HTTP response', () => {
+    const emit = vi.fn();
+    const host = {
+      getType: () => 'ws',
+      switchToWs: () => ({ getClient: () => ({ emit }) }),
+    } as unknown as ArgumentsHost;
+
+    const filter = new AllExceptionsFilter();
+    const logError = vi
+      .spyOn(filter['logger'], 'error')
+      .mockImplementation(() => undefined);
+    filter.catch(new Error('connection string postgresql://secret'), host);
+
+    expect(emit).toHaveBeenCalledWith('exception', {
+      statusCode: 500,
+      message: 'Internal server error',
+    });
+    expect(logError).toHaveBeenCalledTimes(1);
   });
 
   it('hides the raw message of unmapped database errors', () => {
