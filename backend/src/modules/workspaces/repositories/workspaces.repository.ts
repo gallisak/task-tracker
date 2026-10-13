@@ -1,5 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../../database/prisma.service.js';
+import {
+  type DbClient,
+  PrismaService,
+} from '../../../database/prisma.service.js';
 import {
   type Workspace,
   type WorkspaceMember,
@@ -34,8 +37,9 @@ export class WorkspacesRepository {
   findForUser(
     workspaceId: string,
     userId: string,
+    db: DbClient = this.prisma,
   ): Promise<WorkspaceMembership | null> {
-    return this.prisma.workspaceMember.findUnique({
+    return db.workspaceMember.findUnique({
       where: { workspaceId_userId: { workspaceId, userId } },
       include: { workspace: true },
     });

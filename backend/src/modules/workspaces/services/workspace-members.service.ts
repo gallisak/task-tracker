@@ -123,11 +123,10 @@ export class WorkspaceMembersService {
     targetUserId: string,
     role: WorkspaceRole,
   ): Promise<MemberWithUser> {
-    await this.access.requireOwner(workspaceId, actorId);
-
     const member = await this.members.withWorkspaceLock(
       workspaceId,
       async (tx) => {
+        await this.access.requireOwner(workspaceId, actorId, tx);
         const target = await this.requireTarget(workspaceId, targetUserId, tx);
         if (target.role === WorkspaceRole.OWNER && role !== target.role) {
           await this.assertAnotherOwnerExists(workspaceId, tx);
@@ -147,9 +146,8 @@ export class WorkspaceMembersService {
     actorId: string,
     targetUserId: string,
   ): Promise<void> {
-    await this.access.requireOwner(workspaceId, actorId);
-
     await this.members.withWorkspaceLock(workspaceId, async (tx) => {
+      await this.access.requireOwner(workspaceId, actorId, tx);
       const target = await this.requireTarget(workspaceId, targetUserId, tx);
       if (target.role === WorkspaceRole.OWNER) {
         await this.assertAnotherOwnerExists(workspaceId, tx);

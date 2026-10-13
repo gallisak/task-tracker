@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import type { DbClient } from '../../../database/prisma.service.js';
 import { WorkspaceRole } from '../../../generated/prisma/client.js';
 import {
   type WorkspaceMembership,
@@ -20,8 +21,13 @@ export class WorkspaceAccessService {
   async requireMember(
     workspaceId: string,
     userId: string,
+    db?: DbClient,
   ): Promise<WorkspaceMembership> {
-    const membership = await this.workspaces.findForUser(workspaceId, userId);
+    const membership = await this.workspaces.findForUser(
+      workspaceId,
+      userId,
+      db,
+    );
     if (!membership) {
       throw new NotFoundException('Workspace not found');
     }
@@ -31,8 +37,9 @@ export class WorkspaceAccessService {
   async requireOwner(
     workspaceId: string,
     userId: string,
+    db?: DbClient,
   ): Promise<WorkspaceMembership> {
-    const membership = await this.requireMember(workspaceId, userId);
+    const membership = await this.requireMember(workspaceId, userId, db);
     if (membership.role !== WorkspaceRole.OWNER) {
       throw new ForbiddenException(
         'Only workspace owners can perform this action',
