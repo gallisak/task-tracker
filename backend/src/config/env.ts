@@ -61,6 +61,11 @@ export class Env {
   @IsInt()
   @Min(1)
   AUTH_THROTTLE_LIMIT: number = 10;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  REFRESH_THROTTLE_LIMIT: number = 30;
 }
 
 export function validateEnv(raw: Record<string, unknown>): Env {

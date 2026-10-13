@@ -10,6 +10,7 @@ import { AuthService } from './services/auth.service.js';
 import { PasswordService } from './services/password.service.js';
 import { RefreshCookieService } from './services/refresh-cookie.service.js';
 import { TokenService } from './services/token.service.js';
+import { CREDENTIALS_THROTTLER, REFRESH_THROTTLER } from './throttlers.js';
 
 const ONE_MINUTE_MS = 60_000;
 
@@ -21,8 +22,14 @@ const ONE_MINUTE_MS = 60_000;
       inject: [ConfigService],
       useFactory: (config: ConfigService<Env, true>) => [
         {
+          name: CREDENTIALS_THROTTLER,
           ttl: ONE_MINUTE_MS,
           limit: config.get('AUTH_THROTTLE_LIMIT', { infer: true }),
+        },
+        {
+          name: REFRESH_THROTTLER,
+          ttl: ONE_MINUTE_MS,
+          limit: config.get('REFRESH_THROTTLE_LIMIT', { infer: true }),
         },
       ],
     }),
