@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { io } from 'socket.io-client'
 import { refreshSession } from '@/features/auth/auth-api'
 import { sessionStore } from '@/features/auth/session-store'
+import { taskDetailKeys } from './use-task-details'
 import { taskKeys } from './use-tasks'
 
 const TASK_EVENTS = ['task.created', 'task.updated', 'task.deleted']
@@ -17,10 +18,15 @@ export function useBoardRealtime(projectId: string): void {
       auth: (send) => send({ token: sessionStore.get().accessToken }),
     })
 
-    const reloadBoard = () =>
+    const reloadBoard = () => {
       void queryClient.invalidateQueries({
         queryKey: taskKeys.board(projectId),
       })
+      void queryClient.invalidateQueries({
+        queryKey: taskDetailKeys.all,
+        predicate: (query) => query.queryKey[2] === 'status-history',
+      })
+    }
 
     socket.on('connect', () => {
       socket.emit('project:join', { projectId })

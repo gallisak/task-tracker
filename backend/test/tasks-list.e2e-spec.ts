@@ -192,6 +192,10 @@ describe('Task list (e2e)', () => {
     expect(response.body.details).toHaveLength(5);
   });
 
+  it('rejects a page number beyond the supported range', async () => {
+    await listTasks({ page: 100001 }).expect(400);
+  });
+
   it('rejects unknown query parameters', async () => {
     await listTasks({ sort: 'title' }).expect(400);
   });

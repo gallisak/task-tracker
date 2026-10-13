@@ -122,9 +122,38 @@ describe('Tasks (e2e)', () => {
           'title should not be empty',
           'assigneeId must be a UUID',
           'dueDate must be a valid ISO 8601 date string',
+          'dueDate must start with a calendar date (YYYY-MM-DD)',
         ]),
       );
-      expect(response.body.details).toHaveLength(5);
+      expect(response.body.details).toHaveLength(6);
+    });
+
+    it('rejects null for the status and the priority', async () => {
+      await createTask(owner, { title: 'Write copy', status: null }).expect(
+        400,
+      );
+      await createTask(owner, { title: 'Write copy', priority: null }).expect(
+        400,
+      );
+    });
+
+    it('rejects a due date that is not a real calendar date', async () => {
+      await createTask(owner, {
+        title: 'Write copy',
+        dueDate: '2026-W10',
+      }).expect(400);
+      await createTask(owner, {
+        title: 'Write copy',
+        dueDate: '2026-02-31',
+      }).expect(400);
+    });
+
+    it('strips null bytes from text', async () => {
+      const response = await createTask(owner, {
+        title: 'Write\u0000 copy',
+      }).expect(201);
+
+      expect(response.body.title).toBe('Write copy');
     });
 
     it('rejects an assignee who is not a workspace member', async () => {

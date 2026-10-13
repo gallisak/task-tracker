@@ -54,3 +54,20 @@ export interface UpdateTaskInput {
   assigneeId?: string | null
   dueDate?: string | null
 }
+
+export interface Comment {
+  id: string
+  taskId: string
+  body: string
+  author: UserSummary
+  createdAt: string
+  updatedAt: string
+}
+
+export interface StatusChange {
+  id: string
+  fromStatus: TaskStatus
+  toStatus: TaskStatus
+  changedBy: UserSummary
+  changedAt: string
+}

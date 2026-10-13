@@ -4,6 +4,7 @@ import { TaskPriority, TaskStatus } from '../../../generated/prisma/client.js';
 
 export const DEFAULT_PAGE_SIZE = 20;
 export const MAX_PAGE_SIZE = 100;
+export const MAX_PAGE = 100_000;
 
 export class ListTasksQueryDto {
   @IsOptional()
@@ -22,6 +23,7 @@ export class ListTasksQueryDto {
   @Type(() => Number)
   @IsInt()
   @Min(1)
+  @Max(MAX_PAGE)
   page: number = 1;
 
   @IsOptional()

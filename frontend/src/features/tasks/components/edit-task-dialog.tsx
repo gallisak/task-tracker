@@ -8,10 +8,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { toFormValues, toTaskInput, type TaskFormValues } from '../schemas'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  toFormValues,
+  toTaskUpdate,
+  type TaskDirtyFields,
+  type TaskFormValues,
+} from '../schemas'
 import type { Task } from '../types'
 import { useDeleteTask, useUpdateTask } from '../use-tasks'
+import { TaskComments } from './task-comments'
 import { TaskForm } from './task-form'
+import { TaskHistory } from './task-history'
 
 interface DeleteTaskActionProps {
   isPending: boolean
@@ -78,9 +86,18 @@ export function EditTaskDialog({
     onClose()
   }
 
-  const onSubmit = (taskId: string, values: TaskFormValues) => {
+  const onSubmit = (
+    taskId: string,
+    values: TaskFormValues,
+    dirtyFields: TaskDirtyFields,
+  ) => {
+    const input = toTaskUpdate(values, dirtyFields)
+    if (Object.keys(input).length === 0) {
+      close()
+      return
+    }
     updateTask.mutate(
-      { taskId, input: toTaskInput(values) },
+      { taskId, input },
       {
         onSuccess: () => {
           toast.success('Task saved')
@@ -101,7 +118,7 @@ export function EditTaskDialog({
 
   return (
     <Dialog open={task !== null} onOpenChange={(open) => !open && close()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90svh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Edit task</DialogTitle>
           <DialogDescription>
@@ -109,22 +126,42 @@ export function EditTaskDialog({
           </DialogDescription>
         </DialogHeader>
         {task && (
-          <TaskForm
-            key={task.id}
-            workspaceId={workspaceId}
-            defaultValues={toFormValues(task)}
-            submitLabel="Save changes"
-            pendingLabel="Saving…"
-            isPending={updateTask.isPending}
-            error={updateTask.error ?? deleteTask.error}
-            onSubmit={(values) => onSubmit(task.id, values)}
-            secondaryAction={
-              <DeleteTaskAction
-                isPending={deleteTask.isPending}
-                onConfirm={() => onDelete(task.id)}
+          <Tabs key={task.id} defaultValue="details">
+            <TabsList>
+              <TabsTrigger value="details">Details</TabsTrigger>
+              <TabsTrigger value="comments">Comments</TabsTrigger>
+              <TabsTrigger value="history">History</TabsTrigger>
+            </TabsList>
+            <TabsContent
+              value="details"
+              forceMount
+              className="pt-2 data-[state=inactive]:hidden"
+            >
+              <TaskForm
+                workspaceId={workspaceId}
+                defaultValues={toFormValues(task)}
+                submitLabel="Save changes"
+                pendingLabel="Saving…"
+                isPending={updateTask.isPending}
+                error={updateTask.error ?? deleteTask.error}
+                onSubmit={(values, dirtyFields) =>
+                  onSubmit(task.id, values, dirtyFields)
+                }
+                secondaryAction={
+                  <DeleteTaskAction
+                    isPending={deleteTask.isPending}
+                    onConfirm={() => onDelete(task.id)}
+                  />
+                }
               />
-            }
-          />
+            </TabsContent>
+            <TabsContent value="comments" className="pt-2">
+              <TaskComments taskId={task.id} />
+            </TabsContent>
+            <TabsContent value="history" className="pt-2">
+              <TaskHistory taskId={task.id} />
+            </TabsContent>
+          </Tabs>
         )}
       </DialogContent>
     </Dialog>

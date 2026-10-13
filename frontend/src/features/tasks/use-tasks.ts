@@ -5,6 +5,7 @@ import {
 } from '@tanstack/react-query'
 import { COLUMN_PAGE_SIZE } from './constants'
 import * as tasksApi from './tasks-api'
+import { taskDetailKeys } from './use-task-details'
 import type {
   CreateTaskInput,
   TaskFilters,
@@ -44,8 +45,14 @@ export function useMoveTask(projectId: string) {
   return useMutation({
     mutationFn: ({ taskId, status }: { taskId: string; status: TaskStatus }) =>
       tasksApi.updateTask(taskId, { status }),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: taskKeys.board(projectId) }),
+    onSuccess: (task) => {
+      void queryClient.invalidateQueries({
+        queryKey: taskDetailKeys.statusHistory(task.id),
+      })
+      return queryClient.invalidateQueries({
+        queryKey: taskKeys.board(projectId),
+      })
+    },
   })
 }
 
@@ -66,8 +73,14 @@ export function useUpdateTask(projectId: string) {
   return useMutation({
     mutationFn: ({ taskId, input }: { taskId: string; input: UpdateTaskInput }) =>
       tasksApi.updateTask(taskId, input),
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: taskKeys.board(projectId) }),
+    onSuccess: (task) => {
+      void queryClient.invalidateQueries({
+        queryKey: taskDetailKeys.statusHistory(task.id),
+      })
+      return queryClient.invalidateQueries({
+        queryKey: taskKeys.board(projectId),
+      })
+    },
   })
 }
 

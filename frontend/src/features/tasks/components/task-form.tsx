@@ -13,7 +13,12 @@ import {
   TASK_PRIORITIES,
   TASK_STATUSES,
 } from '../constants'
-import { taskSchema, UNASSIGNED, type TaskFormValues } from '../schemas'
+import {
+  taskSchema,
+  UNASSIGNED,
+  type TaskDirtyFields,
+  type TaskFormValues,
+} from '../schemas'
 
 const STATUS_OPTIONS: SelectOption[] = TASK_STATUSES.map((status) => ({
   value: status,
@@ -32,7 +37,7 @@ interface TaskFormProps {
   pendingLabel: string
   isPending: boolean
   error: unknown
-  onSubmit: (values: TaskFormValues) => void
+  onSubmit: (values: TaskFormValues, dirtyFields: TaskDirtyFields) => void
   secondaryAction?: ReactNode
 }
 
@@ -51,7 +56,7 @@ export function TaskForm({
     control,
     register,
     handleSubmit,
-    formState: { errors },
+    formState: { errors, dirtyFields },
   } = useForm<TaskFormValues>({
     resolver: zodResolver(taskSchema),
     defaultValues,
@@ -66,7 +71,11 @@ export function TaskForm({
   ]
 
   return (
-    <form noValidate className="space-y-4" onSubmit={handleSubmit(onSubmit)}>
+    <form
+      noValidate
+      className="space-y-4"
+      onSubmit={handleSubmit((values) => onSubmit(values, dirtyFields))}
+    >
       <FormError error={error ?? members.error} />
       <FormField
         label="Title"

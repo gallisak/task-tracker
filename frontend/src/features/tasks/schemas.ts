@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { Task } from './types'
+import type { Task, UpdateTaskInput } from './types'
 
 export const UNASSIGNED = 'unassigned'
 
@@ -53,3 +53,26 @@ export function toTaskInput(values: TaskFormValues) {
     dueDate: values.dueDate || null,
   }
 }
+
+export type TaskDirtyFields = Partial<Record<keyof TaskFormValues, boolean>>
+
+export function toTaskUpdate(
+  values: TaskFormValues,
+  dirtyFields: TaskDirtyFields,
+): UpdateTaskInput {
+  return Object.fromEntries(
+    Object.entries(toTaskInput(values)).filter(
+      ([field]) => dirtyFields[field as keyof TaskFormValues],
+    ),
+  )
+}
+
+export const commentSchema = z.object({
+  body: z
+    .string()
+    .trim()
+    .min(1, 'Comment cannot be empty')
+    .max(2000, 'Comment must be at most 2000 characters'),
+})
+
+export type CommentFormValues = z.infer<typeof commentSchema>
