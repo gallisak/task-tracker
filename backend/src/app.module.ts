@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD, APP_PIPE } from '@nestjs/core';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { RequestLoggerMiddleware } from './common/middleware/request-logger.middleware.js';
 import { validateEnv } from './config/env.js';
@@ -25,6 +26,7 @@ import { WorkspacesModule } from './modules/workspaces/workspaces.module.js';
       envFilePath: ['.env', '../.env'],
       validate: validateEnv,
     }),
+    EventEmitterModule.forRoot(),
     PrismaModule,
     HealthModule,
     UsersModule,

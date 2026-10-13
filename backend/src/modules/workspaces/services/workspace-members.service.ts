@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import type { AuthenticatedUser } from '../../../common/decorators/current-user.decorator.js';
 import { durationToMs } from '../../../common/utils/duration.js';
 import { normalizeEmail } from '../../../common/utils/email.js';
@@ -16,6 +17,10 @@ import {
 } from '../../../generated/prisma/client.js';
 import { UsersService } from '../../users/services/users.service.js';
 import { InviteMemberDto } from '../dto/invite-member.dto.js';
+import {
+  MEMBER_REMOVED_EVENT,
+  type MemberRemovedEvent,
+} from '../events/member-removed.event.js';
 import {
   type CreateInvitationData,
   type InvitationWithInviter,
@@ -43,6 +48,7 @@ export class WorkspaceMembersService {
     private readonly invitations: WorkspaceInvitationsRepository,
     private readonly users: UsersService,
     private readonly notifier: InvitationNotifier,
+    private readonly events: EventEmitter2,
     config: ConfigService<Env, true>,
   ) {
     this.invitationTtlMs = durationToMs(
@@ -158,6 +164,8 @@ export class WorkspaceMembersService {
     this.logger.log(
       `Member ${targetUserId} removed from workspace ${workspaceId} (by ${actorId})`,
     );
+    const removed: MemberRemovedEvent = { workspaceId, userId: targetUserId };
+    this.events.emit(MEMBER_REMOVED_EVENT, removed);
   }
 
   private async createInvitation(

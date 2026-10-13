@@ -1,3 +1,5 @@
+import { ConfigService } from '@nestjs/config';
+import { JwtService } from '@nestjs/jwt';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { io, type Socket } from 'socket.io-client';
 import request from 'supertest';
@@ -13,6 +15,7 @@ describe('Realtime board updates (e2e)', () => {
   let owner: TestUser;
   let member: TestUser;
   let outsider: TestUser;
+  let workspaceId: string;
   let projectId: string;
   let otherProjectId: string;
   const sockets: Socket[] = [];
@@ -45,6 +48,34 @@ describe('Realtime board updates (e2e)', () => {
     expect(listener).not.toHaveBeenCalled();
   };
 
+  const createProject = async (
+    actor: TestUser,
+    workspace: string,
+    name: string,
+  ) => {
+    const project = await api()
+      .post(`/api/workspaces/${workspace}/projects`)
+      .set(...bearer(actor))
+      .send({ name })
+      .expect(201);
+    return project.body.id as string;
+  };
+
+  const shortLivedToken = (user: TestUser, seconds: number) =>
+    app.get(JwtService, { strict: false }).signAsync(
+      { sub: user.id, email: user.email },
+      {
+        secret: app.get(ConfigService).get<string>('JWT_ACCESS_SECRET'),
+        expiresIn: seconds,
+      },
+    );
+
+  const removeMember = (userId: string) =>
+    api()
+      .delete(`/api/workspaces/${workspaceId}/members/${userId}`)
+      .set(...bearer(owner))
+      .expect(204);
+
   const createTask = (actor: TestUser, body: object, project = projectId) =>
     api()
       .post(`/api/projects/${project}/tasks`)
@@ -69,18 +100,11 @@ describe('Realtime board updates (e2e)', () => {
       .set(...bearer(owner))
       .send({ name: 'Product team' })
       .expect(201);
-    await addMember(app, workspace.body.id, member);
+    workspaceId = workspace.body.id;
+    await addMember(app, workspaceId, member);
 
-    const createProject = async (name: string) => {
-      const project = await api()
-        .post(`/api/workspaces/${workspace.body.id}/projects`)
-        .set(...bearer(owner))
-        .send({ name })
-        .expect(201);
-      return project.body.id as string;
-    };
-    projectId = await createProject('Website');
-    otherProjectId = await createProject('Mobile app');
+    projectId = await createProject(owner, workspaceId, 'Website');
+    otherProjectId = await createProject(owner, workspaceId, 'Mobile app');
   });
 
   afterEach(() => {
@@ -227,6 +251,77 @@ describe('Realtime board updates (e2e)', () => {
       await createTask(owner, { title: 'After leaving' });
 
       await silence;
+    });
+  });
+
+  describe('session lifetime', () => {
+    it('disconnects a socket when its access token expires', async () => {
+      const socket = await connect(await shortLivedToken(member, 1));
+
+      const reason = await nextEvent<string>(socket, 'disconnect');
+
+      expect(reason).toBe('io server disconnect');
+    });
+
+    it('keeps a socket open while its access token is valid', async () => {
+      const socket = await connect(member.accessToken);
+
+      await expectNoEvent(socket, 'disconnect');
+    });
+  });
+
+  describe('removed members', () => {
+    it('stops sending events to a member removed from the workspace', async () => {
+      const socket = await connect(member.accessToken);
+      await join(socket, projectId);
+      await join(socket, otherProjectId);
+
+      await removeMember(member.id);
+
+      const silence = Promise.all([
+        expectNoEvent(socket, 'task.created'),
+        expectNoEvent(socket, 'task.updated'),
+      ]);
+      const task = await createTask(owner, { title: 'After removal' });
+      await createTask(owner, { title: 'Elsewhere' }, otherProjectId);
+      await api()
+        .patch(`/api/tasks/${task.body.id}`)
+        .set(...bearer(owner))
+        .send({ status: 'DONE' })
+        .expect(200);
+      await silence;
+    });
+
+    it('keeps the removed member subscribed to other workspaces', async () => {
+      const own = await api()
+        .post('/api/workspaces')
+        .set(...bearer(member))
+        .send({ name: 'Side project' })
+        .expect(201);
+      const ownProjectId = await createProject(member, own.body.id, 'Blog');
+      const socket = await connect(member.accessToken);
+      await join(socket, projectId);
+      await join(socket, ownProjectId);
+
+      await removeMember(member.id);
+
+      const created = nextEvent<{ task: { title: string } }>(
+        socket,
+        'task.created',
+      );
+      await createTask(member, { title: 'Still mine' }, ownProjectId);
+      expect((await created).task.title).toBe('Still mine');
+    });
+
+    it('leaves other members of the workspace subscribed', async () => {
+      const socket = await connect(owner.accessToken);
+      await join(socket, projectId);
+
+      await removeMember(member.id);
+
+      const created = nextEvent(socket, 'task.created');
+      await createTask(owner, { title: 'Business as usual' });
+      await created;
     });
   });
 });

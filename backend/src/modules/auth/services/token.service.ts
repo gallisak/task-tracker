@@ -12,6 +12,8 @@ export interface AccessTokenPayload {
   email: string;
 }
 
+export type VerifiedAccessToken = AccessTokenPayload & { exp: number };
+
 export interface RefreshTokenPayload {
   sub: string;
   jti: string;
@@ -105,9 +107,9 @@ export class TokenService {
     return new Date(Date.now() + this.refreshTtlMs);
   }
 
-  async verifyAccess(token: string): Promise<AccessTokenPayload> {
+  async verifyAccess(token: string): Promise<VerifiedAccessToken> {
     try {
-      return await this.jwt.verifyAsync<AccessTokenPayload>(token, {
+      return await this.jwt.verifyAsync<VerifiedAccessToken>(token, {
         secret: this.accessSecret,
       });
     } catch {

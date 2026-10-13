@@ -10,6 +10,7 @@ import { taskKeys } from './use-tasks'
 const TASK_EVENTS = ['task.created', 'task.updated', 'task.deleted']
 const JOIN_TIMEOUT_MS = 5_000
 const JOIN_TOAST_ID = 'board-realtime'
+const SERVER_DISCONNECT = 'io server disconnect'
 
 interface JoinResult {
   ok: boolean
@@ -64,17 +65,29 @@ export function useBoardRealtime(projectId: string): void {
       refreshedAfterReject = false
     })
 
+    const reconnectWithFreshToken = () => {
+      refreshSession()
+        .then((session) => {
+          sessionStore.signIn(session)
+          if (isActive) {
+            socket.connect()
+          }
+        })
+        .catch(() => undefined)
+    }
+
     socket.on('connect_error', (error) => {
       if (error.message !== 'Unauthorized' || refreshedAfterReject) {
         return
       }
       refreshedAfterReject = true
-      refreshSession()
-        .then((session) => {
-          sessionStore.signIn(session)
-          socket.connect()
-        })
-        .catch(() => undefined)
+      reconnectWithFreshToken()
+    })
+
+    socket.on('disconnect', (reason) => {
+      if (reason === SERVER_DISCONNECT && isActive) {
+        reconnectWithFreshToken()
+      }
     })
 
     for (const event of TASK_EVENTS) {
