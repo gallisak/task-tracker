@@ -8,6 +8,11 @@ export async function fetchProjects(workspaceId: string): Promise<Project[]> {
   return data
 }
 
+export async function fetchProject(projectId: string): Promise<Project> {
+  const { data } = await apiClient.get<Project>(`/projects/${projectId}`)
+  return data
+}
+
 export async function createProject(
   workspaceId: string,
   input: CreateProjectInput,

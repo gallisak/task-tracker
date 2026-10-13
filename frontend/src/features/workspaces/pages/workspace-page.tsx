@@ -3,15 +3,10 @@ import { Link, useParams } from 'react-router-dom'
 import { ErrorState, LoadingState } from '@/components/page-states'
 import { CreateProjectDialog } from '@/features/projects/components/create-project-dialog'
 import { ProjectList } from '@/features/projects/components/project-list'
-import { getErrorMessage, getErrorStatus } from '@/lib/api-client'
+import { getErrorMessage, isNotFoundError } from '@/lib/api-client'
 import { MembersSection } from '../components/members-section'
 import { RoleBadge } from '../components/role-badge'
 import { useWorkspace } from '../use-workspaces'
-
-function isMissing(error: unknown): boolean {
-  const status = getErrorStatus(error)
-  return status === 404 || status === 400
-}
 
 export function WorkspacePage() {
   const { workspaceId = '' } = useParams()
@@ -22,7 +17,7 @@ export function WorkspacePage() {
   }
 
   if (workspace.isError) {
-    return isMissing(workspace.error) ? (
+    return isNotFoundError(workspace.error) ? (
       <ErrorState
         title="Workspace not found"
         message="It may have been removed, or you are not a member of it."

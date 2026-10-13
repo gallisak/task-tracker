@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { EmptyState, ErrorState, LoadingState } from '@/components/page-states'
 import {
   Card,
@@ -20,7 +21,14 @@ function ProjectCard({ project, canDelete }: ProjectCardProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="truncate">{project.name}</CardTitle>
+        <CardTitle className="truncate">
+          <Link
+            to={`/projects/${project.id}`}
+            className="underline-offset-4 outline-none hover:underline focus-visible:underline"
+          >
+            {project.name}
+          </Link>
+        </CardTitle>
         {project.description && (
           <CardDescription className="line-clamp-2">
             {project.description}

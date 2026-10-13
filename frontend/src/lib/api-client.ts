@@ -34,3 +34,8 @@ export function getErrorMessage(error: unknown): string {
 export function getErrorStatus(error: unknown): number | undefined {
   return error instanceof AxiosError ? error.response?.status : undefined
 }
+
+export function isNotFoundError(error: unknown): boolean {
+  const status = getErrorStatus(error)
+  return status === 404 || status === 400
+}

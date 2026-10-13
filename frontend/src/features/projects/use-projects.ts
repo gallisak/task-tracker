@@ -5,12 +5,20 @@ import type { CreateProjectInput } from './types'
 export const projectKeys = {
   byWorkspace: (workspaceId: string) =>
     ['workspaces', workspaceId, 'projects'] as const,
+  detail: (projectId: string) => ['projects', projectId] as const,
 }
 
 export function useProjects(workspaceId: string) {
   return useQuery({
     queryKey: projectKeys.byWorkspace(workspaceId),
     queryFn: () => projectsApi.fetchProjects(workspaceId),
+  })
+}
+
+export function useProject(projectId: string) {
+  return useQuery({
+    queryKey: projectKeys.detail(projectId),
+    queryFn: () => projectsApi.fetchProject(projectId),
   })
 }
 
