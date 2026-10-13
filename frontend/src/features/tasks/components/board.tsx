@@ -11,6 +11,7 @@ import {
 } from '@dnd-kit/core'
 import { toast } from 'sonner'
 import { getErrorMessage } from '@/lib/api-client'
+import { cn } from '@/lib/utils'
 import { columnCoordinates } from '../board-keyboard'
 import { TASK_STATUSES } from '../constants'
 import type { Task, TaskStatus } from '../types'
@@ -73,7 +74,12 @@ export function Board({ projectId, workspaceId }: BoardProps) {
         filters={filters}
         onChange={setFilters}
       />
-      <div className="grid items-start gap-4 md:grid-cols-3">
+      <div
+        className={cn(
+          'grid items-start gap-4',
+          !visibleStatus && 'md:grid-cols-3',
+        )}
+      >
         {visibleStatuses.map((status) => (
           <BoardColumn
             key={status}
@@ -81,6 +87,7 @@ export function Board({ projectId, workspaceId }: BoardProps) {
             status={status}
             filters={taskFilters}
             movingTaskId={movingTaskId}
+            dragDisabled={Boolean(visibleStatus)}
             onOpenTask={setOpenedTask}
           />
         ))}

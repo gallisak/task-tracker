@@ -1,5 +1,7 @@
 import { LogOutIcon } from 'lucide-react'
-import { Link, Outlet } from 'react-router-dom'
+import { Suspense } from 'react'
+import { Link, Outlet, useLocation } from 'react-router-dom'
+import { LoadingState } from '@/components/page-states'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -48,6 +50,8 @@ function UserMenu() {
 }
 
 export function AppLayout() {
+  const { pathname } = useLocation()
+
   return (
     <div className="flex min-h-svh flex-col">
       <header className="border-b bg-background">
@@ -59,7 +63,9 @@ export function AppLayout() {
         </div>
       </header>
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">
-        <Outlet />
+        <Suspense key={pathname} fallback={<LoadingState />}>
+          <Outlet />
+        </Suspense>
       </main>
     </div>
   )

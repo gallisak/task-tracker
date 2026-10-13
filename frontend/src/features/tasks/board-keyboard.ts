@@ -23,7 +23,8 @@ export const columnCoordinates: KeyboardCoordinateGetter = (
   const columns = TASK_STATUSES.filter((status) => droppableRects.has(status))
   const task = active?.data.current?.task as Task | undefined
   const current = (over?.id ?? task?.status) as TaskStatus | undefined
-  const target = current && columns[columns.indexOf(current) + step]
+  const index = current ? columns.indexOf(current) : -1
+  const target = index === -1 ? undefined : columns[index + step]
   const rect = target && droppableRects.get(target)
   if (!rect) {
     return undefined

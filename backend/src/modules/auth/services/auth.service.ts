@@ -84,6 +84,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
+    await this.acceptInvitations(user);
     return { user, tokens: await this.tokens.issue(user, stored.familyId) };
   }
 

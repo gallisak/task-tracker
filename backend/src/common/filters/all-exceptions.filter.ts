@@ -6,6 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
+import { WsException } from '@nestjs/websockets';
 import { STATUS_CODES } from 'node:http';
 import type { Request, Response } from 'express';
 import type { Socket } from 'socket.io';
@@ -37,6 +38,11 @@ const PRISMA_ERRORS: Record<string, NormalizedError> = {
 
 export const SOCKET_EXCEPTION_EVENT = 'exception';
 
+interface SocketFailure {
+  ok: false;
+  error: string;
+}
+
 const INTERNAL_ERROR: NormalizedError = {
   status: HttpStatus.INTERNAL_SERVER_ERROR,
   message: 'Internal server error',
@@ -50,7 +56,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const { status, message, details } = this.normalize(exception);
 
     if (host.getType() !== 'http') {
-      this.reportToSocket(exception, host, { status, message });
+      this.reportToSocket(exception, host, { status, message, details });
       return;
     }
 
@@ -80,7 +86,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
   private reportToSocket(
     exception: unknown,
     host: ArgumentsHost,
-    { status, message }: NormalizedError,
+    { status, message, details }: NormalizedError,
   ): void {
     if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
       this.logger.error(
@@ -88,17 +94,34 @@ export class AllExceptionsFilter implements ExceptionFilter {
         exception instanceof Error ? exception.stack : String(exception),
       );
     }
-    if (host.getType() === 'ws') {
-      host
-        .switchToWs()
-        .getClient<Socket>()
-        .emit(SOCKET_EXCEPTION_EVENT, { statusCode: status, message });
+    if (host.getType() !== 'ws') {
+      return;
     }
+
+    host
+      .switchToWs()
+      .getClient<Socket>()
+      .emit(SOCKET_EXCEPTION_EVENT, {
+        statusCode: status,
+        message,
+        ...(details ? { details } : {}),
+      });
+
+    const acknowledge = host
+      .getArgs<unknown[]>()
+      .find(
+        (arg): arg is (result: SocketFailure) => void =>
+          typeof arg === 'function',
+      );
+    acknowledge?.({ ok: false, error: message });
   }
 
   private normalize(exception: unknown): NormalizedError {
     if (exception instanceof HttpException) {
       return this.fromHttpException(exception);
+    }
+    if (exception instanceof WsException) {
+      return { status: HttpStatus.BAD_REQUEST, message: exception.message };
     }
     if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       return PRISMA_ERRORS[exception.code] ?? INTERNAL_ERROR;

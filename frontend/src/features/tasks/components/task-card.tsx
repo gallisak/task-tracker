@@ -45,29 +45,30 @@ export function TaskCardView({ task, className }: TaskCardViewProps) {
 
 interface TaskCardProps {
   task: Task
-  isMoving: boolean
+  dragDisabled: boolean
   onOpen: (task: Task) => void
 }
 
-export function TaskCard({ task, isMoving, onOpen }: TaskCardProps) {
+export function TaskCard({ task, dragDisabled, onOpen }: TaskCardProps) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: task.id,
     data: { task },
-    disabled: isMoving,
+    disabled: dragDisabled,
   })
 
   return (
     <li
       ref={setNodeRef}
       className={cn(
-        'cursor-grab rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        dragDisabled ? 'cursor-pointer' : 'cursor-grab',
         isDragging && 'opacity-40',
       )}
       {...listeners}
       {...attributes}
       onClick={() => onOpen(task)}
       onKeyDown={(event) => {
-        if (event.key === 'Enter') {
+        if (event.key === 'Enter' && !isDragging) {
           event.preventDefault()
           onOpen(task)
           return

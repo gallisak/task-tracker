@@ -69,6 +69,7 @@ Swagger covers the REST API only. The socket.io server shares the origin of the 
 - Connect with `auth: { token: <access token> }`; a missing or invalid token is rejected with `Unauthorized`.
 - `project:join` with `{ projectId }` subscribes to a project and is acknowledged with `{ ok, error? }`. Only workspace members can join. `project:leave` unsubscribes.
 - The server sends `task.created` and `task.updated` with `{ task }`, and `task.deleted` with `{ projectId, taskId }`.
+- A message that fails unexpectedly is answered with an `exception` event carrying `{ statusCode, message, details? }`, and its acknowledgement, if the client asked for one, receives `{ ok: false, error }`.
 
 ## Why these tools
 

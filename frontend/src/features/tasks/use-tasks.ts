@@ -2,6 +2,7 @@ import {
   useInfiniteQuery,
   useMutation,
   useQueryClient,
+  type QueryClient,
 } from '@tanstack/react-query'
 import { moveTaskInColumns, type ColumnData } from './board-cache'
 import { COLUMN_PAGE_SIZE } from './constants'
@@ -18,6 +19,27 @@ export const taskKeys = {
   board: (projectId: string) => ['projects', projectId, 'tasks'] as const,
   column: (projectId: string, status: TaskStatus, filters: TaskFilters) =>
     [...taskKeys.board(projectId), status, filters] as const,
+}
+
+const boardsToReload = new Set<string>()
+
+function reloadBoardAfterLastMutation(
+  queryClient: QueryClient,
+  projectId: string,
+  boardChanged: boolean,
+): void {
+  if (boardChanged) {
+    boardsToReload.add(projectId)
+  }
+
+  const boardKey = taskKeys.board(projectId)
+  if (
+    queryClient.isMutating({ mutationKey: boardKey }) > 1 ||
+    !boardsToReload.delete(projectId)
+  ) {
+    return
+  }
+  void queryClient.invalidateQueries({ queryKey: boardKey })
 }
 
 export function useColumnTasks(
@@ -61,12 +83,12 @@ export function useMoveTask(projectId: string) {
         queryClient.setQueryData(key, data)
       }
     },
-    onSuccess: (task) =>
-      queryClient.invalidateQueries({
+    onSuccess: (task) => {
+      void queryClient.invalidateQueries({
         queryKey: taskDetailKeys.statusHistory(task.id),
-      }),
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: taskKeys.board(projectId) }),
+      })
+    },
+    onSettled: () => reloadBoardAfterLastMutation(queryClient, projectId, true),
   })
 }
 
@@ -77,8 +99,8 @@ export function useCreateTask(projectId: string) {
     mutationKey: taskKeys.board(projectId),
     mutationFn: (input: CreateTaskInput) =>
       tasksApi.createTask(projectId, input),
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: taskKeys.board(projectId) }),
+    onSettled: (_data, error) =>
+      reloadBoardAfterLastMutation(queryClient, projectId, !error),
   })
 }
 
@@ -89,12 +111,13 @@ export function useUpdateTask(projectId: string) {
     mutationKey: taskKeys.board(projectId),
     mutationFn: ({ taskId, input }: { taskId: string; input: UpdateTaskInput }) =>
       tasksApi.updateTask(taskId, input),
-    onSuccess: (task) =>
-      queryClient.invalidateQueries({
+    onSuccess: (task) => {
+      void queryClient.invalidateQueries({
         queryKey: taskDetailKeys.statusHistory(task.id),
-      }),
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: taskKeys.board(projectId) }),
+      })
+    },
+    onSettled: (_data, error) =>
+      reloadBoardAfterLastMutation(queryClient, projectId, !error),
   })
 }
 
@@ -104,7 +127,7 @@ export function useDeleteTask(projectId: string) {
   return useMutation({
     mutationKey: taskKeys.board(projectId),
     mutationFn: tasksApi.deleteTask,
-    onSettled: () =>
-      queryClient.invalidateQueries({ queryKey: taskKeys.board(projectId) }),
+    onSettled: (_data, error) =>
+      reloadBoardAfterLastMutation(queryClient, projectId, !error),
   })
 }

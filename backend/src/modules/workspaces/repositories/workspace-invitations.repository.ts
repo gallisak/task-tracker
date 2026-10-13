@@ -33,7 +33,14 @@ export class WorkspaceInvitationsRepository {
     });
   }
 
-  acceptAllForEmail(email: string, userId: string): Promise<number> {
+  async acceptAllForEmail(email: string, userId: string): Promise<number> {
+    const pending = await this.prisma.workspaceInvitation.count({
+      where: { email },
+    });
+    if (pending === 0) {
+      return 0;
+    }
+
     return this.prisma.$transaction(async (tx) => {
       const invitations = await tx.workspaceInvitation.findMany({
         where: { email },

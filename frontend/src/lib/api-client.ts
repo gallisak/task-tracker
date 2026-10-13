@@ -7,9 +7,12 @@ export interface ApiErrorBody {
   details?: string[]
 }
 
+const REQUEST_TIMEOUT_MS = 15_000
+
 export const apiClient = axios.create({
   baseURL: '/api',
   withCredentials: true,
+  timeout: REQUEST_TIMEOUT_MS,
 })
 
 export function getErrorMessage(error: unknown): string {

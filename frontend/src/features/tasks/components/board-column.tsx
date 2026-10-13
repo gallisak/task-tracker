@@ -25,6 +25,7 @@ interface BoardColumnProps {
   status: TaskStatus
   filters: TaskFilters
   movingTaskId: string | null
+  dragDisabled: boolean
   onOpenTask: (task: Task) => void
 }
 
@@ -33,6 +34,7 @@ export function BoardColumn({
   status,
   filters,
   movingTaskId,
+  dragDisabled,
   onOpenTask,
 }: BoardColumnProps) {
   const tasks = useColumnTasks(projectId, status, filters)
@@ -78,7 +80,7 @@ export function BoardColumn({
             <TaskCard
               key={task.id}
               task={task}
-              isMoving={task.id === movingTaskId}
+              dragDisabled={dragDisabled || task.id === movingTaskId}
               onOpen={onOpenTask}
             />
           ))}

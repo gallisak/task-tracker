@@ -1,6 +1,6 @@
+import { lazy, type ComponentType } from 'react'
 import { createBrowserRouter } from 'react-router-dom'
 import { AppLayout } from '@/components/layout/app-layout'
-import { LoadingState } from '@/components/page-states'
 import {
   ProtectedRoute,
   PublicOnlyRoute,
@@ -8,32 +8,43 @@ import {
 import { NotFoundPage } from '@/pages/not-found-page'
 import { RouteErrorPage } from '@/pages/route-error-page'
 
+function lazyPage<Name extends string>(
+  load: () => Promise<Record<Name, ComponentType>>,
+  name: Name,
+) {
+  return lazy(async () => ({ default: (await load())[name] }))
+}
+
+const LoginPage = lazyPage(
+  () => import('@/features/auth/pages/login-page'),
+  'LoginPage',
+)
+const RegisterPage = lazyPage(
+  () => import('@/features/auth/pages/register-page'),
+  'RegisterPage',
+)
+const WorkspacesPage = lazyPage(
+  () => import('@/features/workspaces/pages/workspaces-page'),
+  'WorkspacesPage',
+)
+const WorkspacePage = lazyPage(
+  () => import('@/features/workspaces/pages/workspace-page'),
+  'WorkspacePage',
+)
+const ProjectPage = lazyPage(
+  () => import('@/features/projects/pages/project-page'),
+  'ProjectPage',
+)
+
 export const router = createBrowserRouter([
   {
     errorElement: <RouteErrorPage />,
-    hydrateFallbackElement: (
-      <div className="flex min-h-svh items-center justify-center">
-        <LoadingState />
-      </div>
-    ),
     children: [
       {
         element: <PublicOnlyRoute />,
         children: [
-          {
-            path: '/login',
-            lazy: async () => ({
-              Component: (await import('@/features/auth/pages/login-page'))
-                .LoginPage,
-            }),
-          },
-          {
-            path: '/register',
-            lazy: async () => ({
-              Component: (await import('@/features/auth/pages/register-page'))
-                .RegisterPage,
-            }),
-          },
+          { path: '/login', element: <LoginPage /> },
+          { path: '/register', element: <RegisterPage /> },
         ],
       },
       {
@@ -42,30 +53,9 @@ export const router = createBrowserRouter([
           {
             element: <AppLayout />,
             children: [
-              {
-                path: '/',
-                lazy: async () => ({
-                  Component: (
-                    await import('@/features/workspaces/pages/workspaces-page')
-                  ).WorkspacesPage,
-                }),
-              },
-              {
-                path: '/workspaces/:workspaceId',
-                lazy: async () => ({
-                  Component: (
-                    await import('@/features/workspaces/pages/workspace-page')
-                  ).WorkspacePage,
-                }),
-              },
-              {
-                path: '/projects/:projectId',
-                lazy: async () => ({
-                  Component: (
-                    await import('@/features/projects/pages/project-page')
-                  ).ProjectPage,
-                }),
-              },
+              { path: '/', element: <WorkspacesPage /> },
+              { path: '/workspaces/:workspaceId', element: <WorkspacePage /> },
+              { path: '/projects/:projectId', element: <ProjectPage /> },
             ],
           },
         ],
