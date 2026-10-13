@@ -1,11 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service.js';
-import type {
-  User,
-  WorkspaceInvitation,
-} from '../../../generated/prisma/client.js';
+import type { WorkspaceInvitation } from '../../../generated/prisma/client.js';
+import {
+  USER_SUMMARY,
+  type UserSummary,
+} from '../../users/repositories/user-summary.js';
 
-export type InvitationWithInviter = WorkspaceInvitation & { invitedBy: User };
+export type InvitationWithInviter = WorkspaceInvitation & {
+  invitedBy: UserSummary;
+};
 
 @Injectable()
 export class WorkspaceInvitationsRepository {
@@ -18,14 +21,14 @@ export class WorkspaceInvitationsRepository {
   ): Promise<InvitationWithInviter> {
     return this.prisma.workspaceInvitation.create({
       data: { workspaceId, email, invitedById },
-      include: { invitedBy: true },
+      include: { invitedBy: USER_SUMMARY },
     });
   }
 
   findAll(workspaceId: string): Promise<InvitationWithInviter[]> {
     return this.prisma.workspaceInvitation.findMany({
       where: { workspaceId },
-      include: { invitedBy: true },
+      include: { invitedBy: USER_SUMMARY },
       orderBy: { createdAt: 'asc' },
     });
   }

@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service.js';
-import type { Comment, User } from '../../../generated/prisma/client.js';
+import type { Comment } from '../../../generated/prisma/client.js';
+import {
+  USER_SUMMARY,
+  type UserSummary,
+} from '../../users/repositories/user-summary.js';
 
-export type CommentWithAuthor = Comment & { author: User };
+export type CommentWithAuthor = Comment & { author: UserSummary };
 
-const WITH_AUTHOR = { author: true } as const;
+const WITH_AUTHOR = { author: USER_SUMMARY } as const;
 
 @Injectable()
 export class CommentsRepository {

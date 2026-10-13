@@ -4,11 +4,17 @@ import type {
   Task,
   TaskPriority,
   TaskStatus,
-  User,
 } from '../../../generated/prisma/client.js';
 import type { TaskCursor } from '../utils/task-cursor.js';
+import {
+  USER_SUMMARY,
+  type UserSummary,
+} from '../../users/repositories/user-summary.js';
 
-export type TaskWithUsers = Task & { assignee: User | null; creator: User };
+export type TaskWithUsers = Task & {
+  assignee: UserSummary | null;
+  creator: UserSummary;
+};
 
 export interface TaskAccess {
   task: TaskWithUsers;
@@ -46,7 +52,10 @@ export interface PageRequest {
   take: number;
 }
 
-const WITH_USERS = { assignee: true, creator: true } as const;
+const WITH_USERS = {
+  assignee: USER_SUMMARY,
+  creator: USER_SUMMARY,
+} as const;
 
 @Injectable()
 export class TasksRepository {

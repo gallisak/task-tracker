@@ -74,6 +74,28 @@ describe('AllExceptionsFilter', () => {
     expect(run(prismaError('P2025')).statusCode).toBe(404);
   });
 
+  it('keeps the client status of errors raised by Express middleware', () => {
+    const tooLarge = Object.assign(new Error('request entity too large'), {
+      status: 413,
+    });
+
+    expect(run(tooLarge)).toMatchObject({
+      statusCode: 413,
+      error: 'Payload Too Large',
+      message: 'Payload Too Large',
+    });
+  });
+
+  it('does not trust a server status carried by an unknown error', () => {
+    const upstream = Object.assign(new Error('upstream secret'), {
+      status: 502,
+    });
+    const body = run(upstream);
+
+    expect(body.statusCode).toBe(500);
+    expect(JSON.stringify(body)).not.toContain('secret');
+  });
+
   it('hides the details of unknown errors', () => {
     const body = run(new Error('connection string postgresql://secret'));
 

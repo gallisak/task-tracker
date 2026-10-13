@@ -36,6 +36,12 @@ describe('Auth (e2e)', () => {
     return cookie ? call.set('Cookie', cookie) : call;
   };
 
+  const expireRotationGrace = () =>
+    app.get(PrismaService).refreshToken.updateMany({
+      where: { revokedAt: { not: null } },
+      data: { revokedAt: new Date(Date.now() - 60_000) },
+    });
+
   beforeAll(async () => {
     app = await createTestApp();
   });
@@ -184,14 +190,31 @@ describe('Auth (e2e)', () => {
       await refresh('refresh_token=not.a.jwt').expect(401);
     });
 
-    it('revokes the whole session when a used token is replayed', async () => {
+    it('accepts a token rotated a moment ago so an interrupted refresh keeps the session', async () => {
       const first = cookiePair(refreshCookieOf(await register().expect(201)));
       const second = cookiePair(
         refreshCookieOf(await refresh(first).expect(200)),
       );
 
+      const retried = cookiePair(
+        refreshCookieOf(await refresh(first).expect(200)),
+      );
+
+      expect(retried).not.toBe(second);
+      await refresh(retried).expect(200);
+      await refresh(second).expect(200);
+    });
+
+    it('revokes the whole session when a used token is replayed after the grace period', async () => {
+      const first = cookiePair(refreshCookieOf(await register().expect(201)));
+      const second = cookiePair(
+        refreshCookieOf(await refresh(first).expect(200)),
+      );
+      await expireRotationGrace();
+
       await refresh(first).expect(401);
       await refresh(second).expect(401);
+      await refresh(first).expect(401);
     });
 
     it('keeps other sessions of the same user alive after a replay', async () => {
@@ -206,6 +229,7 @@ describe('Auth (e2e)', () => {
       );
 
       await refresh(first).expect(200);
+      await expireRotationGrace();
       await refresh(first).expect(401);
 
       await refresh(otherDevice).expect(200);

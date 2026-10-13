@@ -76,7 +76,24 @@ export class AllExceptionsFilter implements ExceptionFilter {
     if (exception instanceof Prisma.PrismaClientKnownRequestError) {
       return PRISMA_ERRORS[exception.code] ?? INTERNAL_ERROR;
     }
-    return INTERNAL_ERROR;
+    return this.fromClientError(exception) ?? INTERNAL_ERROR;
+  }
+
+  private fromClientError(exception: unknown): NormalizedError | null {
+    if (typeof exception !== 'object' || exception === null) {
+      return null;
+    }
+
+    const { status } = exception as { status?: unknown };
+    if (
+      typeof status !== 'number' ||
+      !Number.isInteger(status) ||
+      status < HttpStatus.BAD_REQUEST ||
+      status >= HttpStatus.INTERNAL_SERVER_ERROR
+    ) {
+      return null;
+    }
+    return { status, message: STATUS_CODES[status] ?? 'Request failed' };
   }
 
   private fromHttpException(exception: HttpException): NormalizedError {

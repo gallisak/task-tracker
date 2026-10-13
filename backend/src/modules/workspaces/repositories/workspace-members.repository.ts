@@ -5,12 +5,15 @@ import {
 } from '../../../database/prisma.service.js';
 import {
   Prisma,
-  type User,
   type WorkspaceMember,
   WorkspaceRole,
 } from '../../../generated/prisma/client.js';
+import {
+  USER_SUMMARY,
+  type UserSummary,
+} from '../../users/repositories/user-summary.js';
 
-export type MemberWithUser = WorkspaceMember & { user: User };
+export type MemberWithUser = WorkspaceMember & { user: UserSummary };
 
 @Injectable()
 export class WorkspaceMembersRepository {
@@ -29,7 +32,7 @@ export class WorkspaceMembersRepository {
   findAll(workspaceId: string): Promise<MemberWithUser[]> {
     return this.prisma.workspaceMember.findMany({
       where: { workspaceId },
-      include: { user: true },
+      include: { user: USER_SUMMARY },
       orderBy: { joinedAt: 'asc' },
     });
   }
@@ -60,7 +63,7 @@ export class WorkspaceMembersRepository {
   ): Promise<MemberWithUser> {
     return this.prisma.workspaceMember.create({
       data: { workspaceId, userId, role },
-      include: { user: true },
+      include: { user: USER_SUMMARY },
     });
   }
 
@@ -73,7 +76,7 @@ export class WorkspaceMembersRepository {
     return db.workspaceMember.update({
       where: { workspaceId_userId: { workspaceId, userId } },
       data: { role },
-      include: { user: true },
+      include: { user: USER_SUMMARY },
     });
   }
 

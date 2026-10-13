@@ -18,16 +18,36 @@ No setup is needed. To change ports or secrets, copy `.env.example` to `.env`.
 
 ## Development and tests
 
+All commands start from the repository root. Prepare the database once:
+
 ```
 cp .env.example .env
 docker compose up -d postgres
-cd backend && npm install && npm run db:deploy && npm run start:dev
-cd frontend && npm install && npm run dev
 ```
 
+Backend, in one terminal:
+
 ```
-cd backend && npm test && npm run test:e2e
-cd frontend && npm run storybook
+cd backend
+npm install
+npm run db:deploy
+npm run start:dev
+```
+
+Frontend, in a second terminal (http://localhost:5173):
+
+```
+cd frontend
+npm install
+npm run dev
+```
+
+Tests and Storybook:
+
+```
+npm --prefix backend test
+npm --prefix backend run test:e2e
+npm --prefix frontend run storybook
 ```
 
 E2E tests need the `postgres` container and use their own database. GitHub Actions runs lint, build and all tests on every push.
@@ -35,7 +55,7 @@ E2E tests need the `postgres` container and use their own database. GitHub Actio
 ## Architecture
 
 - **Backend**: modules `auth`, `users`, `workspaces`, `projects`, `tasks`, `health`, each split into controller, service and repository. Responses are DTOs, validation and error format are global.
-- **Auth**: 15-minute access token kept in memory, 7-day refresh token in an HttpOnly cookie. Refresh rotates the token; reuse revokes the session.
+- **Auth**: 15-minute access token kept in memory, 7-day refresh token in an HttpOnly cookie. Refresh rotates the token; reuse revokes the session. A token rotated less than 10 seconds ago is still accepted, so a page reload that interrupts a refresh does not log the user out.
 - **Access**: non-members get 404, members without the role get 403. Only owners manage members and delete projects.
 - **Consistency**: a status change and its history row are written in one transaction with a row lock.
 - **Tasks**: cursor pagination, filters by status, assignee and priority, indexes for each.
@@ -54,7 +74,17 @@ E2E tests need the `postgres` container and use their own database. GitHub Actio
 
 - No Redis, no frontend tests, invitations are not emailed.
 - Projects cannot be renamed, invitations cannot be cancelled.
+- Workspaces cannot be renamed or deleted, and a member cannot leave on their own: only an owner removes members.
 - Comments are not realtime; a removed member keeps receiving events until reconnecting.
 - Single backend instance: socket rooms are in memory.
 - Default JWT secrets in `docker-compose.yml`, replace them for a real deployment.
 - The Prisma CLI stays in the backend image for migrations and brings transitive `npm audit` findings that do not affect the API.
+
+## Simplified on purpose, would change with more time
+
+- The board shows status as columns, so the UI filters only by assignee and priority; the API also filters by status.
+- An invited user who already has an account is added at once, without accepting. I would add an accept step and email delivery through a queue.
+- Logout revokes the refresh token; an issued access token stays valid until it expires (15 minutes).
+- Only tasks are paginated. Comments, members and status history are returned in full.
+- Tasks are ordered by creation date; there is no manual order inside a column.
+- The tasks service calls the socket gateway directly. I would publish domain events instead.

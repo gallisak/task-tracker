@@ -8,6 +8,8 @@ import { PasswordService } from './password.service.js';
 import { RefreshTokensRepository } from '../repositories/refresh-tokens.repository.js';
 import { TokenPair, TokenService } from './token.service.js';
 
+const REFRESH_REUSE_GRACE_MS = 10_000;
+
 export interface AuthResult {
   user: User;
   tokens: TokenPair;
@@ -68,7 +70,7 @@ export class AuthService {
     }
 
     const rotated = await this.refreshTokens.revokeIfActive(stored.id);
-    if (!rotated) {
+    if (!rotated && !(await this.wasJustRotated(stored.id))) {
       await this.refreshTokens.revokeFamily(stored.familyId);
       this.logger.warn(
         `Refresh token reuse detected for user ${stored.userId}, session revoked`,
@@ -82,6 +84,19 @@ export class AuthService {
     }
 
     return { user, tokens: await this.tokens.issue(user, stored.familyId) };
+  }
+
+  private async wasJustRotated(tokenId: string): Promise<boolean> {
+    const token = await this.refreshTokens.findById(tokenId);
+    if (!token?.revokedAt) {
+      return false;
+    }
+
+    const revokedMsAgo = Date.now() - token.revokedAt.getTime();
+    return (
+      revokedMsAgo <= REFRESH_REUSE_GRACE_MS &&
+      (await this.refreshTokens.hasActiveToken(token.familyId))
+    );
   }
 
   async logout(refreshToken: string | undefined): Promise<void> {

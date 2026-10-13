@@ -28,6 +28,13 @@ export class RefreshTokensRepository {
     return count === 1;
   }
 
+  async hasActiveToken(familyId: string): Promise<boolean> {
+    const count = await this.prisma.refreshToken.count({
+      where: { familyId, revokedAt: null, expiresAt: { gt: new Date() } },
+    });
+    return count > 0;
+  }
+
   async revokeFamily(familyId: string): Promise<void> {
     await this.prisma.refreshToken.updateMany({
       where: { familyId, revokedAt: null },

@@ -52,4 +52,18 @@ describe('App (e2e)', () => {
       timestamp: expect.any(String),
     });
   });
+
+  it('rejects an oversized body with 413', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email: 'user@example.com', password: 'a'.repeat(200_000) })
+      .expect(413);
+
+    expect(response.body).toMatchObject({
+      statusCode: 413,
+      error: 'Payload Too Large',
+      message: 'Payload Too Large',
+      path: '/api/auth/login',
+    });
+  });
 });
