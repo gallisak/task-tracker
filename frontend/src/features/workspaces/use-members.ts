@@ -30,13 +30,20 @@ export function useInviteMember(workspaceId: string) {
 
   return useMutation({
     mutationFn: (email: string) => membersApi.inviteMember(workspaceId, email),
-    onSuccess: (result) =>
+    onSuccess: () =>
       queryClient.invalidateQueries({
-        queryKey:
-          result.status === 'ADDED'
-            ? memberKeys.members(workspaceId)
-            : memberKeys.invitations(workspaceId),
+        queryKey: memberKeys.invitations(workspaceId),
       }),
+  })
+}
+
+export function useAcceptInvitation() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: membersApi.acceptInvitation,
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: workspaceKeys.all }),
   })
 }
 

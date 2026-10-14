@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { isUuid } from '@/lib/uuid'
 import * as projectsApi from './projects-api'
 import type { CreateProjectInput } from './types'
 
@@ -19,6 +20,7 @@ export function useProject(projectId: string) {
   return useQuery({
     queryKey: projectKeys.detail(projectId),
     queryFn: () => projectsApi.fetchProject(projectId),
+    enabled: isUuid(projectId),
   })
 }
 

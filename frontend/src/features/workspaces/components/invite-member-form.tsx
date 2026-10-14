@@ -21,12 +21,10 @@ export function InviteMemberForm({ workspaceId }: { workspaceId: string }) {
 
   const onSubmit = ({ email }: InviteFormValues) => {
     inviteMember.mutate(email, {
-      onSuccess: (result) => {
+      onSuccess: (invitation) => {
         reset()
         toast.success(
-          result.status === 'ADDED'
-            ? `${result.member.user.name} was added to the workspace`
-            : `Invitation saved. ${result.invitation.email} will join after signing up`,
+          `Invitation sent to ${invitation.email}. They join after accepting it`,
         )
       },
     })

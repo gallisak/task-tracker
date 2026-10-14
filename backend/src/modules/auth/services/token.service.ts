@@ -4,13 +4,15 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { durationToMs } from '../../../common/utils/duration.js';
 import { Env } from '../../../config/env.js';
-import type { User } from '../../../generated/prisma/client.js';
+import type { RefreshToken, User } from '../../../generated/prisma/client.js';
 import { RefreshTokensRepository } from '../repositories/refresh-tokens.repository.js';
 
 export interface AccessTokenPayload {
   sub: string;
   email: string;
 }
+
+export type VerifiedAccessToken = AccessTokenPayload & { exp: number };
 
 export interface RefreshTokenPayload {
   sub: string;
@@ -49,40 +51,29 @@ export class TokenService {
     user: Pick<User, 'id' | 'email'>,
     familyId: string = randomUUID(),
   ): Promise<TokenPair> {
-    const refreshExpiresAt = new Date(Date.now() + this.refreshTtlMs);
     const stored = await this.refreshTokens.create({
       userId: user.id,
       familyId,
-      expiresAt: refreshExpiresAt,
+      expiresAt: this.nextRefreshExpiry(),
     });
-
-    const accessPayload: AccessTokenPayload = {
-      sub: user.id,
-      email: user.email,
-    };
-    const refreshPayload: RefreshTokenPayload = {
-      sub: user.id,
-      jti: stored.id,
-      fam: familyId,
-    };
-
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwt.signAsync(accessPayload, {
-        secret: this.accessSecret,
-        expiresIn: this.accessTtlSeconds,
-      }),
-      this.jwt.signAsync(refreshPayload, {
-        secret: this.refreshSecret,
-        expiresIn: this.refreshTtlMs / 1000,
-      }),
-    ]);
-
-    return { accessToken, refreshToken, refreshExpiresAt };
+    return this.sign(user, stored);
   }
 
-  async verifyAccess(token: string): Promise<AccessTokenPayload> {
+  async rotate(
+    user: Pick<User, 'id' | 'email'>,
+    current: RefreshToken,
+  ): Promise<TokenPair | null> {
+    const next = await this.refreshTokens.rotate(current.id, {
+      userId: user.id,
+      familyId: current.familyId,
+      expiresAt: this.nextRefreshExpiry(),
+    });
+    return next ? this.sign(user, next) : null;
+  }
+
+  async verifyAccess(token: string): Promise<VerifiedAccessToken> {
     try {
-      return await this.jwt.verifyAsync<AccessTokenPayload>(token, {
+      return await this.jwt.verifyAsync<VerifiedAccessToken>(token, {
         secret: this.accessSecret,
       });
     } catch {
@@ -102,5 +93,41 @@ export class TokenService {
     } catch {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
+  }
+
+  private async sign(
+    user: Pick<User, 'id' | 'email'>,
+    stored: RefreshToken,
+  ): Promise<TokenPair> {
+    const accessPayload: AccessTokenPayload = {
+      sub: user.id,
+      email: user.email,
+    };
+    const refreshPayload: RefreshTokenPayload = {
+      sub: user.id,
+      jti: stored.id,
+      fam: stored.familyId,
+    };
+    const refreshTtlSeconds = Math.max(
+      1,
+      Math.ceil((stored.expiresAt.getTime() - Date.now()) / 1000),
+    );
+
+    const [accessToken, refreshToken] = await Promise.all([
+      this.jwt.signAsync(accessPayload, {
+        secret: this.accessSecret,
+        expiresIn: this.accessTtlSeconds,
+      }),
+      this.jwt.signAsync(refreshPayload, {
+        secret: this.refreshSecret,
+        expiresIn: refreshTtlSeconds,
+      }),
+    ]);
+
+    return { accessToken, refreshToken, refreshExpiresAt: stored.expiresAt };
+  }
+
+  private nextRefreshExpiry(): Date {
+    return new Date(Date.now() + this.refreshTtlMs);
   }
 }

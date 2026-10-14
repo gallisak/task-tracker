@@ -15,9 +15,10 @@ import {
   ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { SkipThrottle, ThrottlerGuard } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { Public } from '../../../common/decorators/public.decorator.js';
+import { CREDENTIALS_THROTTLER, REFRESH_THROTTLER } from '../throttlers.js';
 import { AuthResult, AuthService } from '../services/auth.service.js';
 import { AuthResponseDto } from '../dto/auth-response.dto.js';
 import { LoginDto } from '../dto/login.dto.js';
@@ -38,6 +39,7 @@ export class AuthController {
 
   @Post('register')
   @UseGuards(ThrottlerGuard)
+  @SkipThrottle({ [REFRESH_THROTTLER]: true })
   @ApiTooManyRequestsResponse({ description: 'Too many attempts' })
   @ApiConflictResponse({ description: 'Email is already registered' })
   async register(
@@ -49,6 +51,7 @@ export class AuthController {
 
   @Post('login')
   @UseGuards(ThrottlerGuard)
+  @SkipThrottle({ [REFRESH_THROTTLER]: true })
   @ApiTooManyRequestsResponse({ description: 'Too many attempts' })
   @HttpCode(HttpStatus.OK)
   @ApiUnauthorizedResponse({ description: 'Invalid email or password' })
@@ -60,6 +63,9 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @UseGuards(ThrottlerGuard)
+  @SkipThrottle({ [CREDENTIALS_THROTTLER]: true })
+  @ApiTooManyRequestsResponse({ description: 'Too many attempts' })
   @HttpCode(HttpStatus.OK)
   @ApiCookieAuth(REFRESH_COOKIE_NAME)
   @ApiUnauthorizedResponse({ description: 'Invalid or expired refresh token' })

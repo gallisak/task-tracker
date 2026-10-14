@@ -4,16 +4,25 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import type { AuthenticatedUser } from '../../../common/decorators/current-user.decorator.js';
+import { durationToMs } from '../../../common/utils/duration.js';
 import { normalizeEmail } from '../../../common/utils/email.js';
 import { isUniqueViolation } from '../../../common/utils/prisma-errors.js';
+import { Env } from '../../../config/env.js';
 import {
   type Prisma,
-  type User,
   WorkspaceRole,
 } from '../../../generated/prisma/client.js';
 import { UsersService } from '../../users/services/users.service.js';
 import { InviteMemberDto } from '../dto/invite-member.dto.js';
 import {
+  MEMBER_REMOVED_EVENT,
+  type MemberRemovedEvent,
+} from '../events/member-removed.event.js';
+import {
+  type CreateInvitationData,
   type InvitationWithInviter,
   WorkspaceInvitationsRepository,
 } from '../repositories/workspace-invitations.repository.js';
@@ -21,22 +30,31 @@ import {
   type MemberWithUser,
   WorkspaceMembersRepository,
 } from '../repositories/workspace-members.repository.js';
+import {
+  createInvitationToken,
+  hashInvitationToken,
+} from '../utils/invitation-token.js';
+import { InvitationNotifier } from './invitation-notifier.service.js';
 import { WorkspaceAccessService } from './workspace-access.service.js';
-
-export type InviteResult =
-  | { status: 'ADDED'; member: MemberWithUser }
-  | { status: 'INVITED'; invitation: InvitationWithInviter };
 
 @Injectable()
 export class WorkspaceMembersService {
   private readonly logger = new Logger(WorkspaceMembersService.name);
+  private readonly invitationTtlMs: number;
 
   constructor(
     private readonly access: WorkspaceAccessService,
     private readonly members: WorkspaceMembersRepository,
     private readonly invitations: WorkspaceInvitationsRepository,
     private readonly users: UsersService,
-  ) {}
+    private readonly notifier: InvitationNotifier,
+    private readonly events: EventEmitter2,
+    config: ConfigService<Env, true>,
+  ) {
+    this.invitationTtlMs = durationToMs(
+      config.get('INVITATION_TTL', { infer: true }),
+    );
+  }
 
   async findAll(
     workspaceId: string,
@@ -58,22 +76,51 @@ export class WorkspaceMembersService {
     workspaceId: string,
     actorId: string,
     dto: InviteMemberDto,
-  ): Promise<InviteResult> {
+  ): Promise<InvitationWithInviter> {
     await this.access.requireOwner(workspaceId, actorId);
 
     const email = normalizeEmail(dto.email);
     const user = await this.users.findByEmail(email);
-
-    if (user) {
-      return {
-        status: 'ADDED',
-        member: await this.addExistingUser(workspaceId, user, actorId),
-      };
+    if (user && (await this.access.isMember(workspaceId, user.id))) {
+      throw new ConflictException('User is already a member of this workspace');
     }
-    return {
-      status: 'INVITED',
-      invitation: await this.createInvitation(workspaceId, email, actorId),
-    };
+
+    const { token, tokenHash } = createInvitationToken();
+    const invitation = await this.createInvitation({
+      workspaceId,
+      email,
+      invitedById: actorId,
+      tokenHash,
+      expiresAt: new Date(Date.now() + this.invitationTtlMs),
+    });
+
+    this.logger.log(
+      `Invitation ${invitation.id} created for workspace ${workspaceId} (by ${actorId})`,
+    );
+    this.notifier.send(email, token);
+    return invitation;
+  }
+
+  async acceptInvitation(
+    actor: AuthenticatedUser,
+    token: string,
+  ): Promise<string> {
+    const invitation = await this.invitations.findByTokenHash(
+      hashInvitationToken(token),
+    );
+    const usable =
+      invitation !== null &&
+      invitation.expiresAt > new Date() &&
+      invitation.email === normalizeEmail(actor.email);
+
+    if (!usable || !(await this.invitations.accept(invitation, actor.id))) {
+      throw new NotFoundException('Invitation not found or expired');
+    }
+
+    this.logger.log(
+      `User ${actor.id} joined workspace ${invitation.workspaceId} by invitation`,
+    );
+    return invitation.workspaceId;
   }
 
   async updateRole(
@@ -82,11 +129,10 @@ export class WorkspaceMembersService {
     targetUserId: string,
     role: WorkspaceRole,
   ): Promise<MemberWithUser> {
-    await this.access.requireOwner(workspaceId, actorId);
-
     const member = await this.members.withWorkspaceLock(
       workspaceId,
       async (tx) => {
+        await this.access.requireOwner(workspaceId, actorId, tx);
         const target = await this.requireTarget(workspaceId, targetUserId, tx);
         if (target.role === WorkspaceRole.OWNER && role !== target.role) {
           await this.assertAnotherOwnerExists(workspaceId, tx);
@@ -106,9 +152,8 @@ export class WorkspaceMembersService {
     actorId: string,
     targetUserId: string,
   ): Promise<void> {
-    await this.access.requireOwner(workspaceId, actorId);
-
     await this.members.withWorkspaceLock(workspaceId, async (tx) => {
+      await this.access.requireOwner(workspaceId, actorId, tx);
       const target = await this.requireTarget(workspaceId, targetUserId, tx);
       if (target.role === WorkspaceRole.OWNER) {
         await this.assertAnotherOwnerExists(workspaceId, tx);
@@ -119,60 +164,15 @@ export class WorkspaceMembersService {
     this.logger.log(
       `Member ${targetUserId} removed from workspace ${workspaceId} (by ${actorId})`,
     );
-  }
-
-  async acceptPendingInvitations(user: User): Promise<void> {
-    const accepted = await this.invitations.acceptAllForEmail(
-      user.email,
-      user.id,
-    );
-    if (accepted > 0) {
-      this.logger.log(
-        `User ${user.id} joined ${accepted} workspace(s) by invitation`,
-      );
-    }
-  }
-
-  private async addExistingUser(
-    workspaceId: string,
-    user: User,
-    actorId: string,
-  ): Promise<MemberWithUser> {
-    try {
-      const member = await this.members.add(
-        workspaceId,
-        user.id,
-        WorkspaceRole.MEMBER,
-      );
-      this.logger.log(
-        `User ${user.id} added to workspace ${workspaceId} (by ${actorId})`,
-      );
-      return member;
-    } catch (error) {
-      if (isUniqueViolation(error)) {
-        throw new ConflictException(
-          'User is already a member of this workspace',
-        );
-      }
-      throw error;
-    }
+    const removed: MemberRemovedEvent = { workspaceId, userId: targetUserId };
+    this.events.emit(MEMBER_REMOVED_EVENT, removed);
   }
 
   private async createInvitation(
-    workspaceId: string,
-    email: string,
-    actorId: string,
+    data: CreateInvitationData,
   ): Promise<InvitationWithInviter> {
     try {
-      const invitation = await this.invitations.create(
-        workspaceId,
-        email,
-        actorId,
-      );
-      this.logger.log(
-        `Invitation ${invitation.id} created for workspace ${workspaceId} (by ${actorId})`,
-      );
-      return invitation;
+      return await this.invitations.create(data);
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictException('This email has already been invited');

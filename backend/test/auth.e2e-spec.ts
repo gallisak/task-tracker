@@ -36,12 +36,6 @@ describe('Auth (e2e)', () => {
     return cookie ? call.set('Cookie', cookie) : call;
   };
 
-  const expireRotationGrace = () =>
-    app.get(PrismaService).refreshToken.updateMany({
-      where: { revokedAt: { not: null } },
-      data: { revokedAt: new Date(Date.now() - 60_000) },
-    });
-
   beforeAll(async () => {
     app = await createTestApp();
   });
@@ -190,31 +184,31 @@ describe('Auth (e2e)', () => {
       await refresh('refresh_token=not.a.jwt').expect(401);
     });
 
-    it('accepts a token rotated a moment ago so an interrupted refresh keeps the session', async () => {
+    it('revokes the whole session as soon as a used token is presented again', async () => {
       const first = cookiePair(refreshCookieOf(await register().expect(201)));
       const second = cookiePair(
         refreshCookieOf(await refresh(first).expect(200)),
       );
 
-      const retried = cookiePair(
-        refreshCookieOf(await refresh(first).expect(200)),
-      );
+      await refresh(first).expect(401);
 
-      expect(retried).not.toBe(second);
-      await refresh(retried).expect(200);
-      await refresh(second).expect(200);
+      await refresh(second).expect(401);
+      const active = await app
+        .get(PrismaService)
+        .refreshToken.count({ where: { revokedAt: null } });
+      expect(active).toBe(0);
     });
 
-    it('revokes the whole session when a used token is replayed after the grace period', async () => {
+    it('gives nothing to a stolen token replayed right after the owner refreshed', async () => {
       const first = cookiePair(refreshCookieOf(await register().expect(201)));
-      const second = cookiePair(
+      const owner = cookiePair(
         refreshCookieOf(await refresh(first).expect(200)),
       );
-      await expireRotationGrace();
 
-      await refresh(first).expect(401);
-      await refresh(second).expect(401);
-      await refresh(first).expect(401);
+      const thief = await refresh(first).expect(401);
+
+      expect(thief.body.accessToken).toBeUndefined();
+      await refresh(owner).expect(401);
     });
 
     it('keeps other sessions of the same user alive after a replay', async () => {
@@ -229,7 +223,6 @@ describe('Auth (e2e)', () => {
       );
 
       await refresh(first).expect(200);
-      await expireRotationGrace();
       await refresh(first).expect(401);
 
       await refresh(otherDevice).expect(200);

@@ -3,7 +3,7 @@ import path from 'node:path'
 import { parseEnv } from 'node:util'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 
 function readApiPort(): string {
   if (process.env.PORT) {
@@ -26,6 +26,9 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: { '@': path.resolve(import.meta.dirname, 'src') },
+  },
+  test: {
+    include: ['src/**/*.test.ts'],
   },
   server: {
     proxy: {

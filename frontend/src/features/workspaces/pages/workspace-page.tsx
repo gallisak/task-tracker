@@ -4,6 +4,7 @@ import { ErrorState, LoadingState } from '@/components/page-states'
 import { CreateProjectDialog } from '@/features/projects/components/create-project-dialog'
 import { ProjectList } from '@/features/projects/components/project-list'
 import { getErrorMessage, isNotFoundError } from '@/lib/api-client'
+import { isUuid } from '@/lib/uuid'
 import { MembersSection } from '../components/members-section'
 import { RoleBadge } from '../components/role-badge'
 import { useWorkspace } from '../use-workspaces'
@@ -12,17 +13,21 @@ export function WorkspacePage() {
   const { workspaceId = '' } = useParams()
   const workspace = useWorkspace(workspaceId)
 
+  if (!isUuid(workspaceId) || isNotFoundError(workspace.error)) {
+    return (
+      <ErrorState
+        title="Workspace not found"
+        message="It may have been removed, or you are not a member of it."
+      />
+    )
+  }
+
   if (workspace.isPending) {
     return <LoadingState label="Loading workspace…" />
   }
 
   if (workspace.isError) {
-    return isNotFoundError(workspace.error) ? (
-      <ErrorState
-        title="Workspace not found"
-        message="It may have been removed, or you are not a member of it."
-      />
-    ) : (
+    return (
       <ErrorState
         title="Could not load workspace"
         message={getErrorMessage(workspace.error)}

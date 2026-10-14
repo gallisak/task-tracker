@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ProjectAccessService } from '../../projects/services/project-access.service.js';
-import { WorkspaceAccessService } from '../../workspaces/services/workspace-access.service.js';
 import { CreateTaskDto } from '../dto/create-task.dto.js';
 import { ListTasksQueryDto } from '../dto/list-tasks-query.dto.js';
 import { UpdateTaskDto } from '../dto/update-task.dto.js';
@@ -15,6 +14,7 @@ import {
   TaskStatusChangesRepository,
 } from '../repositories/task-status-changes.repository.js';
 import {
+  AssigneeNotMemberError,
   type TaskAccess,
   type TaskWithUsers,
   TasksRepository,
@@ -37,7 +37,6 @@ export class TasksService {
     private readonly tasks: TasksRepository,
     private readonly statusChanges: TaskStatusChangesRepository,
     private readonly projectAccess: ProjectAccessService,
-    private readonly workspaceAccess: WorkspaceAccessService,
     private readonly gateway: TasksGateway,
   ) {}
 
@@ -50,20 +49,21 @@ export class TasksService {
       projectId,
       userId,
     );
-    if (dto.assigneeId) {
-      await this.assertAssignable(project.workspaceId, dto.assigneeId);
-    }
-
-    const task = await this.tasks.create({
-      projectId: project.id,
-      creatorId: userId,
-      title: dto.title,
-      description: dto.description || null,
-      status: dto.status,
-      priority: dto.priority,
-      assigneeId: dto.assigneeId ?? null,
-      dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
-    });
+    const task = await this.rejectOutsideAssignee(() =>
+      this.tasks.create(
+        {
+          projectId: project.id,
+          creatorId: userId,
+          title: dto.title,
+          description: dto.description || null,
+          status: dto.status,
+          priority: dto.priority,
+          assigneeId: dto.assigneeId ?? null,
+          dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+        },
+        project.workspaceId,
+      ),
+    );
 
     this.logger.log(
       `Task created: ${task.id} in project ${project.id} by user ${userId}`,
@@ -124,11 +124,9 @@ export class TasksService {
     if (Object.keys(changes).length === 0) {
       return task;
     }
-    if (changes.assigneeId) {
-      await this.assertAssignable(workspaceId, changes.assigneeId);
-    }
-
-    const updated = await this.tasks.update(task.id, changes, userId);
+    const updated = await this.rejectOutsideAssignee(() =>
+      this.tasks.update(task.id, changes, userId, workspaceId),
+    );
     this.logger.log(
       `Task updated: ${task.id} by user ${userId} (${Object.keys(changes).join(', ')})`,
     );
@@ -155,14 +153,16 @@ export class TasksService {
     return access;
   }
 
-  private async assertAssignable(
-    workspaceId: string,
-    assigneeId: string,
-  ): Promise<void> {
-    if (!(await this.workspaceAccess.isMember(workspaceId, assigneeId))) {
-      throw new BadRequestException(
-        'Assignee must be a member of the workspace',
-      );
+  private async rejectOutsideAssignee<T>(save: () => Promise<T>): Promise<T> {
+    try {
+      return await save();
+    } catch (error) {
+      if (error instanceof AssigneeNotMemberError) {
+        throw new BadRequestException(
+          'Assignee must be a member of the workspace',
+        );
+      }
+      throw error;
     }
   }
 

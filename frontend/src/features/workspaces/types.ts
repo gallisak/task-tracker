@@ -30,8 +30,9 @@ export interface Invitation {
   role: WorkspaceRole
   invitedBy: UserSummary
   createdAt: string
+  expiresAt: string
 }
 
-export type InviteResult =
-  | { status: 'ADDED'; member: Member }
-  | { status: 'INVITED'; invitation: Invitation }
+export interface AcceptedInvitation {
+  workspaceId: string
+}

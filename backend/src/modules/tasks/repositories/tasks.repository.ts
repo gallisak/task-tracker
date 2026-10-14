@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service.js';
 import type {
+  Prisma,
   Task,
   TaskPriority,
   TaskStatus,
@@ -52,6 +53,8 @@ export interface PageRequest {
   take: number;
 }
 
+export class AssigneeNotMemberError extends Error {}
+
 const WITH_USERS = {
   assignee: USER_SUMMARY,
   creator: USER_SUMMARY,
@@ -61,8 +64,13 @@ const WITH_USERS = {
 export class TasksRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(data: CreateTaskData): Promise<TaskWithUsers> {
-    return this.prisma.task.create({ data, include: WITH_USERS });
+  create(data: CreateTaskData, workspaceId: string): Promise<TaskWithUsers> {
+    return this.prisma.$transaction(async (tx) => {
+      if (data.assigneeId) {
+        await this.assertAssignable(tx, workspaceId, data.assigneeId);
+      }
+      return tx.task.create({ data, include: WITH_USERS });
+    });
   }
 
   async findPage(
@@ -115,8 +123,13 @@ export class TasksRepository {
     taskId: string,
     data: UpdateTaskData,
     changedById: string,
+    workspaceId: string,
   ): Promise<TaskWithUsers> {
     return this.prisma.$transaction(async (tx) => {
+      if (data.assigneeId) {
+        await this.assertAssignable(tx, workspaceId, data.assigneeId);
+      }
+
       if (data.status) {
         const [current] = await tx.$queryRaw<{ status: TaskStatus }[]>`
           SELECT status FROM tasks WHERE id = ${taskId}::uuid FOR UPDATE`;
@@ -143,5 +156,19 @@ export class TasksRepository {
 
   async delete(taskId: string): Promise<void> {
     await this.prisma.task.delete({ where: { id: taskId } });
+  }
+
+  private async assertAssignable(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    assigneeId: string,
+  ): Promise<void> {
+    await tx.$queryRaw`SELECT id FROM workspaces WHERE id = ${workspaceId}::uuid FOR SHARE`;
+    const member = await tx.workspaceMember.findUnique({
+      where: { workspaceId_userId: { workspaceId, userId: assigneeId } },
+    });
+    if (!member) {
+      throw new AssigneeNotMemberError();
+    }
   }
 }

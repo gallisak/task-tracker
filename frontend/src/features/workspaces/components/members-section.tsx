@@ -10,7 +10,7 @@ import {
 import { UserAvatar } from '@/components/user-avatar'
 import { useSession } from '@/features/auth/session-store'
 import { getErrorMessage } from '@/lib/api-client'
-import type { Member, WorkspaceRole } from '../types'
+import type { Invitation, Member, WorkspaceRole } from '../types'
 import {
   useInvitations,
   useMembers,
@@ -86,6 +86,15 @@ function MemberRow({ workspaceId, member, canManage, isSelf }: MemberRowProps) {
   )
 }
 
+const expiryFormat = new Intl.DateTimeFormat('en', { dateStyle: 'medium' })
+
+function invitationStatus(invitation: Invitation): string {
+  const expiresAt = new Date(invitation.expiresAt)
+  return expiresAt.getTime() <= Date.now()
+    ? 'Expired, invite again to renew'
+    : `Invited by ${invitation.invitedBy.name}, expires ${expiryFormat.format(expiresAt)}`
+}
+
 function PendingInvitations({ workspaceId }: { workspaceId: string }) {
   const invitations = useInvitations(workspaceId)
 
@@ -106,7 +115,7 @@ function PendingInvitations({ workspaceId }: { workspaceId: string }) {
           >
             <span className="truncate">{invitation.email}</span>
             <span className="shrink-0 text-muted-foreground">
-              Invited by {invitation.invitedBy.name}
+              {invitationStatus(invitation)}
             </span>
           </li>
         ))}

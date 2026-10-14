@@ -1,14 +1,11 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import type { User } from '../../../generated/prisma/client.js';
 import { UsersService } from '../../users/services/users.service.js';
-import { WorkspaceMembersService } from '../../workspaces/services/workspace-members.service.js';
 import { LoginDto } from '../dto/login.dto.js';
 import { RegisterDto } from '../dto/register.dto.js';
 import { PasswordService } from './password.service.js';
 import { RefreshTokensRepository } from '../repositories/refresh-tokens.repository.js';
 import { TokenPair, TokenService } from './token.service.js';
-
-const REFRESH_REUSE_GRACE_MS = 10_000;
 
 export interface AuthResult {
   user: User;
@@ -24,7 +21,6 @@ export class AuthService {
     private readonly passwords: PasswordService,
     private readonly tokens: TokenService,
     private readonly refreshTokens: RefreshTokensRepository,
-    private readonly workspaceMembers: WorkspaceMembersService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthResult> {
@@ -36,7 +32,6 @@ export class AuthService {
     });
 
     this.logger.log(`User registered: ${user.id}`);
-    await this.acceptInvitations(user);
     return { user, tokens: await this.tokens.issue(user) };
   }
 
@@ -53,7 +48,6 @@ export class AuthService {
     }
 
     await this.refreshTokens.deleteExpiredForUser(user.id);
-    await this.acceptInvitations(user);
 
     this.logger.log(`User logged in: ${user.id}`);
     return { user, tokens: await this.tokens.issue(user) };
@@ -70,8 +64,13 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    const rotated = await this.refreshTokens.revokeIfActive(stored.id);
-    if (!rotated && !(await this.wasJustRotated(stored.id))) {
+    const user = await this.users.findById(stored.userId);
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+
+    const tokens = await this.tokens.rotate(user, stored);
+    if (!tokens) {
       await this.refreshTokens.revokeFamily(stored.familyId);
       this.logger.warn(
         `Refresh token reuse detected for user ${stored.userId}, session revoked`,
@@ -79,37 +78,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    const user = await this.users.findById(stored.userId);
-    if (!user) {
-      throw new UnauthorizedException('Invalid or expired refresh token');
-    }
-
-    await this.acceptInvitations(user);
-    return { user, tokens: await this.tokens.issue(user, stored.familyId) };
-  }
-
-  private async acceptInvitations(user: User): Promise<void> {
-    try {
-      await this.workspaceMembers.acceptPendingInvitations(user);
-    } catch (error) {
-      this.logger.error(
-        `Could not accept pending invitations for user ${user.id}`,
-        error instanceof Error ? error.stack : String(error),
-      );
-    }
-  }
-
-  private async wasJustRotated(tokenId: string): Promise<boolean> {
-    const token = await this.refreshTokens.findById(tokenId);
-    if (!token?.revokedAt) {
-      return false;
-    }
-
-    const revokedMsAgo = Date.now() - token.revokedAt.getTime();
-    return (
-      revokedMsAgo <= REFRESH_REUSE_GRACE_MS &&
-      (await this.refreshTokens.hasActiveToken(token.familyId))
-    );
+    return { user, tokens };
   }
 
   async logout(refreshToken: string | undefined): Promise<void> {

@@ -8,6 +8,7 @@ export class InvitationResponseDto {
   role: WorkspaceRole;
   invitedBy: UserSummaryDto;
   createdAt: Date;
+  expiresAt: Date;
 
   static from(invitation: InvitationWithInviter): InvitationResponseDto {
     const dto = new InvitationResponseDto();
@@ -16,6 +17,7 @@ export class InvitationResponseDto {
     dto.role = invitation.role;
     dto.invitedBy = UserSummaryDto.from(invitation.invitedBy);
     dto.createdAt = invitation.createdAt;
+    dto.expiresAt = invitation.expiresAt;
     return dto;
   }
 }

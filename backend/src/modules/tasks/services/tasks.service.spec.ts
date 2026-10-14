@@ -5,12 +5,12 @@ import {
   WorkspaceRole,
 } from '../../../generated/prisma/client.js';
 import type { ProjectAccessService } from '../../projects/services/project-access.service.js';
-import type { WorkspaceAccessService } from '../../workspaces/services/workspace-access.service.js';
 import type { TasksGateway } from '../gateways/tasks.gateway.js';
 import type { TaskStatusChangesRepository } from '../repositories/task-status-changes.repository.js';
-import type {
-  TaskWithUsers,
-  TasksRepository,
+import {
+  AssigneeNotMemberError,
+  type TaskWithUsers,
+  type TasksRepository,
 } from '../repositories/tasks.repository.js';
 import { encodeTaskCursor } from '../utils/task-cursor.js';
 import { TasksService } from './tasks.service.js';
@@ -56,7 +56,6 @@ describe('TasksService', () => {
   };
   const statusChanges = { findAllByTask: vi.fn() };
   const projectAccess = { requireProject: vi.fn() };
-  const workspaceAccess = { isMember: vi.fn() };
   const gateway = {
     taskCreated: vi.fn(),
     taskUpdated: vi.fn(),
@@ -70,7 +69,6 @@ describe('TasksService', () => {
       tasks as unknown as TasksRepository,
       statusChanges as unknown as TaskStatusChangesRepository,
       projectAccess as unknown as ProjectAccessService,
-      workspaceAccess as unknown as WorkspaceAccessService,
       gateway as unknown as TasksGateway,
     );
     vi.spyOn(service['logger'], 'log').mockImplementation(() => undefined);
@@ -87,17 +85,19 @@ describe('TasksService', () => {
     it('creates an unassigned task on behalf of the current user', async () => {
       await service.create(PROJECT_ID, USER_ID, { title: 'Write copy' });
 
-      expect(tasks.create).toHaveBeenCalledWith({
-        projectId: PROJECT_ID,
-        creatorId: USER_ID,
-        title: 'Write copy',
-        description: null,
-        status: undefined,
-        priority: undefined,
-        assigneeId: null,
-        dueDate: null,
-      });
-      expect(workspaceAccess.isMember).not.toHaveBeenCalled();
+      expect(tasks.create).toHaveBeenCalledWith(
+        {
+          projectId: PROJECT_ID,
+          creatorId: USER_ID,
+          title: 'Write copy',
+          description: null,
+          status: undefined,
+          priority: undefined,
+          assigneeId: null,
+          dueDate: null,
+        },
+        WORKSPACE_ID,
+      );
     });
 
     it('converts the due date and keeps the chosen status and priority', async () => {
@@ -114,28 +114,24 @@ describe('TasksService', () => {
           priority: TaskPriority.HIGH,
           dueDate: new Date('2026-12-01T10:00:00.000Z'),
         }),
+        WORKSPACE_ID,
       );
     });
 
-    it('accepts an assignee who belongs to the workspace', async () => {
-      workspaceAccess.isMember.mockResolvedValue(true);
-
+    it('saves an assignee together with the workspace to check them against', async () => {
       await service.create(PROJECT_ID, USER_ID, {
         title: 'Write copy',
         assigneeId: TEAMMATE_ID,
       });
 
-      expect(workspaceAccess.isMember).toHaveBeenCalledWith(
-        WORKSPACE_ID,
-        TEAMMATE_ID,
-      );
       expect(tasks.create).toHaveBeenCalledWith(
         expect.objectContaining({ assigneeId: TEAMMATE_ID }),
+        WORKSPACE_ID,
       );
     });
 
     it('rejects an assignee from outside the workspace', async () => {
-      workspaceAccess.isMember.mockResolvedValue(false);
+      tasks.create.mockRejectedValue(new AssigneeNotMemberError());
 
       await expect(
         service.create(PROJECT_ID, USER_ID, {
@@ -143,7 +139,7 @@ describe('TasksService', () => {
           assigneeId: 'stranger',
         }),
       ).rejects.toThrow(BadRequestException);
-      expect(tasks.create).not.toHaveBeenCalled();
+      expect(gateway.taskCreated).not.toHaveBeenCalled();
     });
 
     it('does not create anything when the project is not accessible', async () => {
@@ -282,6 +278,7 @@ describe('TasksService', () => {
           status: TaskStatus.DONE,
         },
         USER_ID,
+        WORKSPACE_ID,
       );
     });
 
@@ -296,45 +293,40 @@ describe('TasksService', () => {
       expect(result.id).toBe('task-1');
     });
 
-    it('checks a new assignee against the workspace of the task', async () => {
+    it('saves a new assignee together with the workspace of the task', async () => {
       existing();
-      workspaceAccess.isMember.mockResolvedValue(true);
 
       await service.update('task-1', USER_ID, { assigneeId: TEAMMATE_ID });
 
-      expect(workspaceAccess.isMember).toHaveBeenCalledWith(
-        WORKSPACE_ID,
-        TEAMMATE_ID,
-      );
       expect(tasks.update).toHaveBeenCalledWith(
         'task-1',
         {
           assigneeId: TEAMMATE_ID,
         },
         USER_ID,
+        WORKSPACE_ID,
       );
     });
 
     it('rejects a new assignee from outside the workspace', async () => {
       existing();
-      workspaceAccess.isMember.mockResolvedValue(false);
+      tasks.update.mockRejectedValue(new AssigneeNotMemberError());
 
       await expect(
         service.update('task-1', USER_ID, { assigneeId: 'stranger' }),
       ).rejects.toThrow('Assignee must be a member of the workspace');
-      expect(tasks.update).not.toHaveBeenCalled();
     });
 
-    it('unassigns the task without a membership check', async () => {
+    it('unassigns the task', async () => {
       existing({ assigneeId: TEAMMATE_ID, assignee: user(TEAMMATE_ID) });
 
       await service.update('task-1', USER_ID, { assigneeId: null });
 
-      expect(workspaceAccess.isMember).not.toHaveBeenCalled();
       expect(tasks.update).toHaveBeenCalledWith(
         'task-1',
         { assigneeId: null },
         USER_ID,
+        WORKSPACE_ID,
       );
     });
 
@@ -356,6 +348,7 @@ describe('TasksService', () => {
           dueDate: null,
         },
         USER_ID,
+        WORKSPACE_ID,
       );
     });
 
@@ -413,7 +406,7 @@ describe('TasksService', () => {
 
     it('stays silent when an update is rejected', async () => {
       existing();
-      workspaceAccess.isMember.mockResolvedValue(false);
+      tasks.update.mockRejectedValue(new AssigneeNotMemberError());
 
       await expect(
         service.update('task-1', USER_ID, { assigneeId: 'stranger' }),
