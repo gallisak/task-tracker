@@ -36,13 +36,6 @@ export class RefreshTokensRepository {
     });
   }
 
-  findActiveInFamily(familyId: string): Promise<RefreshToken | null> {
-    return this.prisma.refreshToken.findFirst({
-      where: { familyId, revokedAt: null, expiresAt: { gt: new Date() } },
-      orderBy: { createdAt: 'desc' },
-    });
-  }
-
   async revokeFamily(familyId: string): Promise<void> {
     await this.prisma.refreshToken.updateMany({
       where: { familyId, revokedAt: null },

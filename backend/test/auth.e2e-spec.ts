@@ -22,14 +22,6 @@ function cookiePair(setCookie: string): string {
   return setCookie.split(';')[0];
 }
 
-function tokenIdOf(cookie: string): string {
-  const [, payload] = cookie.slice('refresh_token='.length).split('.');
-  const claims = JSON.parse(
-    Buffer.from(payload, 'base64url').toString('utf8'),
-  ) as { jti: string };
-  return claims.jti;
-}
-
 describe('Auth (e2e)', () => {
   let app: NestExpressApplication;
 
@@ -43,12 +35,6 @@ describe('Auth (e2e)', () => {
     const call = request(app.getHttpServer()).post('/api/auth/refresh');
     return cookie ? call.set('Cookie', cookie) : call;
   };
-
-  const expireRotationGrace = () =>
-    app.get(PrismaService).refreshToken.updateMany({
-      where: { revokedAt: { not: null } },
-      data: { revokedAt: new Date(Date.now() - 60_000) },
-    });
 
   beforeAll(async () => {
     app = await createTestApp();
@@ -198,52 +184,31 @@ describe('Auth (e2e)', () => {
       await refresh('refresh_token=not.a.jwt').expect(401);
     });
 
-    it('hands a retry inside the grace period the token that was already issued', async () => {
+    it('revokes the whole session as soon as a used token is presented again', async () => {
       const first = cookiePair(refreshCookieOf(await register().expect(201)));
       const second = cookiePair(
         refreshCookieOf(await refresh(first).expect(200)),
       );
 
-      const retried = cookiePair(
-        refreshCookieOf(await refresh(first).expect(200)),
-      );
+      await refresh(first).expect(401);
 
-      expect(tokenIdOf(retried)).toBe(tokenIdOf(second));
+      await refresh(second).expect(401);
       const active = await app
         .get(PrismaService)
         .refreshToken.count({ where: { revokedAt: null } });
-      expect(active).toBe(1);
-      await refresh(retried).expect(200);
+      expect(active).toBe(0);
     });
 
-    it('ends the session once two holders of a token replayed in the grace period both use it', async () => {
+    it('gives nothing to a stolen token replayed right after the owner refreshed', async () => {
       const first = cookiePair(refreshCookieOf(await register().expect(201)));
       const owner = cookiePair(
         refreshCookieOf(await refresh(first).expect(200)),
       );
-      const thief = cookiePair(
-        refreshCookieOf(await refresh(first).expect(200)),
-      );
 
-      const thiefNext = cookiePair(
-        refreshCookieOf(await refresh(thief).expect(200)),
-      );
-      await expireRotationGrace();
+      const thief = await refresh(first).expect(401);
 
+      expect(thief.body.accessToken).toBeUndefined();
       await refresh(owner).expect(401);
-      await refresh(thiefNext).expect(401);
-    });
-
-    it('revokes the whole session when a used token is replayed after the grace period', async () => {
-      const first = cookiePair(refreshCookieOf(await register().expect(201)));
-      const second = cookiePair(
-        refreshCookieOf(await refresh(first).expect(200)),
-      );
-      await expireRotationGrace();
-
-      await refresh(first).expect(401);
-      await refresh(second).expect(401);
-      await refresh(first).expect(401);
     });
 
     it('keeps other sessions of the same user alive after a replay', async () => {
@@ -258,7 +223,6 @@ describe('Auth (e2e)', () => {
       );
 
       await refresh(first).expect(200);
-      await expireRotationGrace();
       await refresh(first).expect(401);
 
       await refresh(otherDevice).expect(200);

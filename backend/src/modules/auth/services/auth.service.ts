@@ -7,8 +7,6 @@ import { PasswordService } from './password.service.js';
 import { RefreshTokensRepository } from '../repositories/refresh-tokens.repository.js';
 import { TokenPair, TokenService } from './token.service.js';
 
-const REFRESH_REUSE_GRACE_MS = 10_000;
-
 export interface AuthResult {
   user: User;
   tokens: TokenPair;
@@ -71,9 +69,7 @@ export class AuthService {
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
-    const tokens =
-      (await this.tokens.rotate(user, stored)) ??
-      (await this.reissueAfterRecentRotation(user, stored.id));
+    const tokens = await this.tokens.rotate(user, stored);
     if (!tokens) {
       await this.refreshTokens.revokeFamily(stored.familyId);
       this.logger.warn(
@@ -83,24 +79,6 @@ export class AuthService {
     }
 
     return { user, tokens };
-  }
-
-  private async reissueAfterRecentRotation(
-    user: User,
-    tokenId: string,
-  ): Promise<TokenPair | null> {
-    const token = await this.refreshTokens.findById(tokenId);
-    if (
-      !token?.revokedAt ||
-      Date.now() - token.revokedAt.getTime() > REFRESH_REUSE_GRACE_MS
-    ) {
-      return null;
-    }
-
-    const successor = await this.refreshTokens.findActiveInFamily(
-      token.familyId,
-    );
-    return successor ? this.tokens.pairFor(user, successor) : null;
   }
 
   async logout(refreshToken: string | undefined): Promise<void> {

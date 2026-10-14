@@ -56,7 +56,7 @@ export class TokenService {
       familyId,
       expiresAt: this.nextRefreshExpiry(),
     });
-    return this.pairFor(user, stored);
+    return this.sign(user, stored);
   }
 
   async rotate(
@@ -68,10 +68,34 @@ export class TokenService {
       familyId: current.familyId,
       expiresAt: this.nextRefreshExpiry(),
     });
-    return next ? this.pairFor(user, next) : null;
+    return next ? this.sign(user, next) : null;
   }
 
-  async pairFor(
+  async verifyAccess(token: string): Promise<VerifiedAccessToken> {
+    try {
+      return await this.jwt.verifyAsync<VerifiedAccessToken>(token, {
+        secret: this.accessSecret,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired access token');
+    }
+  }
+
+  async verifyRefresh(
+    token: string,
+    options: { ignoreExpiration?: boolean } = {},
+  ): Promise<RefreshTokenPayload> {
+    try {
+      return await this.jwt.verifyAsync<RefreshTokenPayload>(token, {
+        secret: this.refreshSecret,
+        ignoreExpiration: options.ignoreExpiration ?? false,
+      });
+    } catch {
+      throw new UnauthorizedException('Invalid or expired refresh token');
+    }
+  }
+
+  private async sign(
     user: Pick<User, 'id' | 'email'>,
     stored: RefreshToken,
   ): Promise<TokenPair> {
@@ -105,29 +129,5 @@ export class TokenService {
 
   private nextRefreshExpiry(): Date {
     return new Date(Date.now() + this.refreshTtlMs);
-  }
-
-  async verifyAccess(token: string): Promise<VerifiedAccessToken> {
-    try {
-      return await this.jwt.verifyAsync<VerifiedAccessToken>(token, {
-        secret: this.accessSecret,
-      });
-    } catch {
-      throw new UnauthorizedException('Invalid or expired access token');
-    }
-  }
-
-  async verifyRefresh(
-    token: string,
-    options: { ignoreExpiration?: boolean } = {},
-  ): Promise<RefreshTokenPayload> {
-    try {
-      return await this.jwt.verifyAsync<RefreshTokenPayload>(token, {
-        secret: this.refreshSecret,
-        ignoreExpiration: options.ignoreExpiration ?? false,
-      });
-    } catch {
-      throw new UnauthorizedException('Invalid or expired refresh token');
-    }
   }
 }
