@@ -2,8 +2,8 @@ import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { io } from 'socket.io-client'
 import { toast } from 'sonner'
-import { refreshSession } from '@/features/auth/auth-api'
 import { sessionStore } from '@/features/auth/session-store'
+import { reconnectWithFreshToken } from './realtime-reconnect'
 import { taskDetailKeys } from './use-task-details'
 import { taskKeys } from './use-tasks'
 
@@ -65,28 +65,19 @@ export function useBoardRealtime(projectId: string): void {
       refreshedAfterReject = false
     })
 
-    const reconnectWithFreshToken = () => {
-      refreshSession()
-        .then((session) => {
-          sessionStore.signIn(session)
-          if (isActive) {
-            socket.connect()
-          }
-        })
-        .catch(() => undefined)
-    }
+    const reconnect = () => reconnectWithFreshToken(socket, () => isActive)
 
     socket.on('connect_error', (error) => {
       if (error.message !== 'Unauthorized' || refreshedAfterReject) {
         return
       }
       refreshedAfterReject = true
-      reconnectWithFreshToken()
+      reconnect()
     })
 
     socket.on('disconnect', (reason) => {
       if (reason === SERVER_DISCONNECT && isActive) {
-        reconnectWithFreshToken()
+        reconnect()
       }
     })
 

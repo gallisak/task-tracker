@@ -1,4 +1,5 @@
 import type { AxiosError, AxiosInstance, InternalAxiosRequestConfig } from 'axios'
+import { isRateLimited } from '@/lib/api-client'
 import { refreshSession } from './auth-api'
 import { sessionStore } from './session-store'
 import { endSession } from './use-auth'
@@ -30,7 +31,10 @@ export function setupAuthInterceptors(client: AxiosInstance): void {
 
     try {
       sessionStore.signIn(await refreshSession())
-    } catch {
+    } catch (refreshError) {
+      if (isRateLimited(refreshError)) {
+        throw refreshError
+      }
       endSession()
       throw error
     }

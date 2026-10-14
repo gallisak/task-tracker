@@ -1,18 +1,13 @@
-import { AxiosError, AxiosHeaders, type AxiosResponse } from 'axios'
+import { AxiosError } from 'axios'
 import { describe, expect, it } from 'vitest'
-import { getErrorMessage, getErrorStatus, isNotFoundError } from './api-client'
-
-function httpError(status: number, data: unknown = {}): AxiosError {
-  const config = { headers: new AxiosHeaders() }
-  const response: AxiosResponse = {
-    status,
-    statusText: '',
-    data,
-    headers: {},
-    config,
-  }
-  return new AxiosError('Request failed', undefined, config, null, response)
-}
+import { httpError } from '@/test/http-error'
+import {
+  getErrorMessage,
+  getErrorStatus,
+  getRetryAfterMs,
+  isNotFoundError,
+  isRateLimited,
+} from './api-client'
 
 describe('isNotFoundError', () => {
   it('recognises a 404 response', () => {
@@ -59,5 +54,37 @@ describe('getErrorMessage', () => {
     expect(getErrorMessage(new AxiosError('Network Error'))).toBe(
       'Cannot reach the server. Check your connection and try again.',
     )
+  })
+})
+
+describe('isRateLimited', () => {
+  it('recognises a 429 response only', () => {
+    expect(isRateLimited(httpError(429))).toBe(true)
+    expect(isRateLimited(httpError(401))).toBe(false)
+    expect(isRateLimited(new AxiosError('Network Error'))).toBe(false)
+  })
+})
+
+describe('getRetryAfterMs', () => {
+  it('reads the wait from a named Retry-After header', () => {
+    const error = httpError(429, {}, { 'Retry-After-refresh': '12' })
+
+    expect(getRetryAfterMs(error)).toBe(12_000)
+  })
+
+  it('reads the wait from a plain Retry-After header', () => {
+    expect(getRetryAfterMs(httpError(429, {}, { 'Retry-After': '3' }))).toBe(
+      3_000,
+    )
+  })
+
+  it('falls back to a short wait when the header is missing', () => {
+    expect(getRetryAfterMs(httpError(429))).toBe(5_000)
+  })
+
+  it('never waits longer than a minute', () => {
+    const error = httpError(429, {}, { 'Retry-After': '3600' })
+
+    expect(getRetryAfterMs(error)).toBe(60_000)
   })
 })

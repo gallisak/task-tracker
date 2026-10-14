@@ -1,4 +1,5 @@
 import { useMutation } from '@tanstack/react-query'
+import { getRetryAfterMs, isRateLimited } from '@/lib/api-client'
 import { queryClient } from '@/lib/query-client'
 import * as authApi from './auth-api'
 import { mayHaveSession, sessionStore } from './session-store'
@@ -35,9 +36,18 @@ export async function restoreSession(): Promise<void> {
     return
   }
 
-  try {
-    sessionStore.signIn(await authApi.refreshSession())
-  } catch {
-    sessionStore.signOut()
+  for (;;) {
+    try {
+      sessionStore.signIn(await authApi.refreshSession())
+      return
+    } catch (error) {
+      if (!isRateLimited(error)) {
+        sessionStore.signOut()
+        return
+      }
+      await new Promise((resolve) =>
+        setTimeout(resolve, getRetryAfterMs(error)),
+      )
+    }
   }
 }

@@ -38,6 +38,25 @@ export function getErrorStatus(error: unknown): number | undefined {
   return error instanceof AxiosError ? error.response?.status : undefined
 }
 
+const DEFAULT_RETRY_AFTER_MS = 5_000
+const MAX_RETRY_AFTER_MS = 60_000
+
+export function isRateLimited(error: unknown): boolean {
+  return getErrorStatus(error) === 429
+}
+
+export function getRetryAfterMs(error: unknown): number {
+  const headers: object =
+    error instanceof AxiosError ? (error.response?.headers ?? {}) : {}
+  const value = Object.entries(headers).find(([name]) =>
+    name.toLowerCase().startsWith('retry-after'),
+  )?.[1]
+  const seconds = Number(value)
+  return Number.isFinite(seconds) && seconds > 0
+    ? Math.min(seconds * 1000, MAX_RETRY_AFTER_MS)
+    : DEFAULT_RETRY_AFTER_MS
+}
+
 export function isNotFoundError(error: unknown): boolean {
   return getErrorStatus(error) === 404
 }
