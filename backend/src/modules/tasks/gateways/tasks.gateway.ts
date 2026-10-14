@@ -47,6 +47,8 @@ type AuthenticatedSocket = Socket<
 
 const projectRoom = (projectId: string) => `project:${projectId}`;
 const userRoom = (userId: string) => `user:${userId}`;
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
+const PROJECT_NOT_FOUND: JoinResult = { ok: false, error: 'Project not found' };
 
 @WebSocketGateway()
 export class TasksGateway implements OnGatewayInit, OnGatewayConnection {
@@ -81,10 +83,17 @@ export class TasksGateway implements OnGatewayInit, OnGatewayConnection {
   }
 
   async handleConnection(socket: AuthenticatedSocket): Promise<void> {
-    const expiry = setTimeout(
-      () => socket.disconnect(true),
-      socket.data.tokenExpiresAt - Date.now(),
-    );
+    let expiry: NodeJS.Timeout;
+    const waitForExpiry = () => {
+      const remaining = socket.data.tokenExpiresAt - Date.now();
+      expiry = setTimeout(
+        remaining > MAX_TIMER_DELAY_MS
+          ? waitForExpiry
+          : () => socket.disconnect(true),
+        Math.min(remaining, MAX_TIMER_DELAY_MS),
+      );
+    };
+    waitForExpiry();
     socket.once('disconnect', () => clearTimeout(expiry));
     await socket.join(userRoom(socket.data.user.id));
   }
@@ -116,19 +125,20 @@ export class TasksGateway implements OnGatewayInit, OnGatewayConnection {
       return { ok: false, error: 'Invalid project id' };
     }
 
-    let workspaceId: string;
-    try {
-      const { project } = await this.projectAccess.requireProject(
-        projectId,
-        socket.data.user.id,
-      );
-      workspaceId = project.workspaceId;
-    } catch {
-      return { ok: false, error: 'Project not found' };
+    const userId = socket.data.user.id;
+    const workspaceId = await this.findWorkspaceOf(projectId, userId);
+    if (!workspaceId) {
+      return PROJECT_NOT_FOUND;
     }
 
     socket.data.workspaceByProject.set(projectId, workspaceId);
     await socket.join(projectRoom(projectId));
+
+    if (!(await this.findWorkspaceOf(projectId, userId))) {
+      socket.data.workspaceByProject.delete(projectId);
+      await socket.leave(projectRoom(projectId));
+      return PROJECT_NOT_FOUND;
+    }
     return { ok: true };
   }
 
@@ -158,6 +168,21 @@ export class TasksGateway implements OnGatewayInit, OnGatewayConnection {
 
   taskDeleted(projectId: string, taskId: string): void {
     this.broadcast(projectId, TaskEvent.Deleted, { projectId, taskId });
+  }
+
+  private async findWorkspaceOf(
+    projectId: string,
+    userId: string,
+  ): Promise<string | null> {
+    try {
+      const { project } = await this.projectAccess.requireProject(
+        projectId,
+        userId,
+      );
+      return project.workspaceId;
+    } catch {
+      return null;
+    }
   }
 
   private broadcast(projectId: string, event: string, payload: object): void {
