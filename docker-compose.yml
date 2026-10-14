@@ -21,7 +21,6 @@ services:
   backend:
     build: ./backend
     restart: unless-stopped
-    command: ['sh', 'docker/compose-start.sh']
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,8 +32,8 @@ services:
       TRUST_PROXY: 1
       AUTH_THROTTLE_LIMIT: ${AUTH_THROTTLE_LIMIT:-10}
       REFRESH_THROTTLE_LIMIT: ${REFRESH_THROTTLE_LIMIT:-30}
-      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-}
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Set JWT_ACCESS_SECRET in .env, see README}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?Set JWT_REFRESH_SECRET in .env, see README}
       JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
       JWT_REFRESH_TTL: ${JWT_REFRESH_TTL:-7d}
       INVITATION_TTL: ${INVITATION_TTL:-7d}
